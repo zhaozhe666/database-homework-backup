@@ -26,6 +26,15 @@
   <a class="me-card" href="{{ url_for('my_sold') }}">
     <div class="num">{{ sold_cnt }}</div><div>我卖出的</div>
   </a>
+  <a class="me-card" href="{{ url_for('my_favorites') }}">
+    <div class="num">{{ favorite_cnt }}</div><div>我的收藏</div>
+  </a>
+  <a class="me-card me-message-card" href="{{ url_for('my_messages') }}">
+    {% if unread_message_cnt %}
+      <span class="me-unread-badge">{{ unread_message_cnt }}</span>
+    {% endif %}
+    <div class="num">信</div><div>信息</div>
+  </a>
   <a class="me-card" href="{{ url_for('publish') }}">
     <div class="num">＋</div><div>发布闲置</div>
   </a>

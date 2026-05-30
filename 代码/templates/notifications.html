@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}提醒中心 · 二手集市{% endblock %}
+{% block content %}
+<div class="notification-head">
+  <h2 class="page-title">提醒中心</h2>
+</div>
+
+{% if unread_conversations or refund_orders %}
+<div class="notification-list">
+  {% for conversation in unread_conversations %}
+    <a class="notification-item unread" href="{{ url_for('my_messages', with_user=conversation.other_user_id) }}">
+      <span class="notification-dot"></span>
+      <div>
+        <div class="notification-title">{{ conversation.sender_name }} 发来新消息{% if conversation.unread_count > 1 %}（{{ conversation.unread_count }} 条）{% endif %}</div>
+        <p>
+          {% if conversation.product_title %}关于《{{ conversation.product_title }}》：{% endif %}
+          {{ conversation.latest_content }}
+        </p>
+        <small>{{ conversation.latest_at }}</small>
+      </div>
+    </a>
+  {% endfor %}
+
+  {% for order in refund_orders %}
+    <a class="notification-item urgent" href="{{ url_for('order_detail', oid=order.id) }}">
+      <span class="notification-dot"></span>
+      <div>
+        <div class="notification-title">{{ order.buyer_name }} 申请退款</div>
+        <p>订单《{{ order.title }}》等待你处理，金额 ¥{{ '%.2f'|format(order.amount) }}。</p>
+        {% if order.refund_reason %}<p>原因：{{ order.refund_reason }}</p>{% endif %}
+        <small>{{ order.refund_requested_at or order.created_at }}</small>
+      </div>
+    </a>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="empty">暂无新提醒。</div>
+{% endif %}
+{% endblock %}

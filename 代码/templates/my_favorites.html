@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}我的收藏 · 二手集市{% endblock %}
+{% block content %}
+<h2 class="page-title">我的收藏</h2>
+{% if products %}
+<div class="grid favorite-grid">
+  {% for p in products %}
+  <article class="card favorite-card">
+    <a class="favorite-card-link" href="{{ url_for('product_detail', pid=p.id) }}">
+      <div class="card-img">
+        {% set cover = cover_image(p.image_url) %}
+        {% if cover %}
+          <img src="{{ cover }}" alt="{{ p.title }}">
+        {% else %}
+          <div class="no-img">暂无图片</div>
+        {% endif %}
+        {% if p.status == 'locked' %}<span class="tag tag-locked">交易中</span>{% endif %}
+        {% if p.status == 'sold' %}<span class="tag tag-sold">已售出</span>{% endif %}
+        {% if p.status == 'removed' %}<span class="tag tag-removed">已下架</span>{% endif %}
+      </div>
+      <div class="card-body">
+        <div class="card-title">{{ p.title }}</div>
+        <div class="card-meta">
+          <span class="price">¥{{ '%.2f'|format(p.price) }}</span>
+          <span class="cond">{{ p.condition_level }}</span>
+        </div>
+        <div class="card-foot">
+          <span>{{ p.seller_name }}</span>
+          <span>{{ p.category_name or '未分类' }}</span>
+        </div>
+      </div>
+    </a>
+    <form action="{{ url_for('unfavorite_product', pid=p.id) }}" method="post" class="favorite-card-action">
+      <button type="submit" class="btn-outline btn-xs">取消收藏</button>
+    </form>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="empty">还没有收藏商品，去 <a href="{{ url_for('index') }}">首页</a> 看看吧～</div>
+{% endif %}
+{% endblock %}

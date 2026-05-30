@@ -22,6 +22,12 @@
         {% if current_user %}
           <a href="{{ url_for('publish') }}" class="nav-link nav-sell">发布闲置</a>
           <a href="{{ url_for('me') }}" class="nav-link">个人中心</a>
+          <a href="{{ url_for('my_notifications') }}" class="nav-link nav-notice {% if notification_summary and notification_summary.total %}has-notice{% endif %}">
+            <span>提醒</span>
+            {% if notification_summary and notification_summary.total %}
+              <span class="notice-badge">{{ notification_summary.total }}</span>
+            {% endif %}
+          </a>
           <span class="nav-wallet">
             <span class="nav-wallet-label">钱包</span>
             <span>¥{{ '%.2f'|format(current_user.balance) }}</span>

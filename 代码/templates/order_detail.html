@@ -24,20 +24,36 @@
     <li><b>订单号：</b>{{ order.order_no }}</li>
     <li><b>买家：</b>{{ order.buyer_name }}</li>
     <li><b>卖家：</b>{{ order.seller_name }}</li>
-    {% if order.status in ('paid','completed') %}
+    {% if order.status in ('paid','refund_requested','refunded','completed') %}
       <li><b>卖家联系方式：</b>{{ order.seller_phone or '未填写' }}</li>
     {% endif %}
     <li><b>收货地址：</b>{{ order.address or '未填写' }}</li>
     <li><b>下单时间：</b>{{ order.created_at }}</li>
+    {% if payment_deadline %}<li><b>付款截止：</b>{{ payment_deadline }}</li>{% endif %}
     {% if order.paid_at %}<li><b>支付时间：</b>{{ order.paid_at }}</li>{% endif %}
+    {% if order.refund_requested_at %}<li><b>申请退款：</b>{{ order.refund_requested_at }}</li>{% endif %}
+    {% if order.refunded_at %}<li><b>退款时间：</b>{{ order.refunded_at }}</li>{% endif %}
     {% if order.completed_at %}<li><b>完成时间：</b>{{ order.completed_at }}</li>{% endif %}
     {% if order.cancelled_at %}<li><b>取消时间：</b>{{ order.cancelled_at }}</li>{% endif %}
+    {% if order.refund_reason %}<li><b>退款原因：</b>{{ order.refund_reason }}</li>{% endif %}
   </ul>
+
+  {% if order.status == 'created' and payment_deadline_ms %}
+    <div class="pay-countdown"
+         data-payment-countdown
+         data-deadline-ms="{{ payment_deadline_ms }}"
+         data-server-now-ms="{{ server_now_ms }}">
+      <span>付款倒计时</span>
+      <strong data-countdown-text>--:--</strong>
+      <small>超时后订单会自动取消，商品恢复在售</small>
+    </div>
+  {% endif %}
 
   <div class="order-actions">
     {% if order.status == 'created' and is_buyer %}
+      <p class="own-tip">请在 10 分钟内付款，超时订单会自动取消。</p>
       <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" style="display:inline">
-        <button class="btn-primary">余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
+        <button class="btn-primary" data-pay-submit>余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
       </form>
     {% endif %}
     {% if order.status == 'created' %}
@@ -49,9 +65,24 @@
       <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
         <button class="btn-primary">确认收货</button>
       </form>
+      <form action="{{ url_for('request_refund', oid=order.id) }}" method="post" class="refund-form">
+        <input type="text" name="reason" maxlength="255" placeholder="申请退款原因（选填）">
+        <button class="btn-outline" type="submit">申请退款</button>
+      </form>
     {% endif %}
     {% if order.status == 'paid' and not is_buyer %}
       <p class="own-tip">买家已付款（平台托管中），请尽快发货，待买家确认收货后到账。</p>
+    {% endif %}
+    {% if order.status == 'refund_requested' and is_buyer %}
+      <p class="own-tip">退款申请已提交，等待卖家同意。</p>
+    {% endif %}
+    {% if order.status == 'refund_requested' and not is_buyer %}
+      <form action="{{ url_for('approve_refund', oid=order.id) }}" method="post" style="display:inline">
+        <button class="btn-primary">同意退款</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'refunded' %}
+      <p class="own-tip">退款已完成，商品已恢复在售。</p>
     {% endif %}
   </div>
 
@@ -72,5 +103,88 @@
     </table>
   </div>
   {% endif %}
+
+  {% if order.status == 'completed' %}
+  <div class="review-panel">
+    <h3>交易评价</h3>
+    {% if reviews %}
+      <div class="review-list">
+        {% for review in reviews %}
+          <div class="review-item">
+            <div class="review-head">
+              <b>{{ review.reviewer_name }}</b>
+              <span>评价 {{ review.target_name }}</span>
+              <span class="review-rating">{{ review.rating }} 分</span>
+            </div>
+            <p>{{ review.content or '交易顺利，未填写文字评价。' }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">暂无评价。</p>
+    {% endif %}
+
+    {% if not my_review and review_target_id %}
+      <form action="{{ url_for('review_order', oid=order.id) }}" method="post" class="review-form">
+        <label>评分
+          <select name="rating" required>
+            <option value="5">5 分 非常满意</option>
+            <option value="4">4 分 比较满意</option>
+            <option value="3">3 分 一般</option>
+            <option value="2">2 分 不太满意</option>
+            <option value="1">1 分 不满意</option>
+          </select>
+        </label>
+        <label>评价内容
+          <textarea name="content" rows="3" maxlength="500" placeholder="说说这次交易体验"></textarea>
+        </label>
+        <button type="submit" class="btn-primary">提交评价</button>
+      </form>
+    {% elif my_review %}
+      <p class="own-tip">你已经评价过这笔订单。</p>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
+{% if order.status == 'created' and payment_deadline_ms %}
+<script>
+  const countdownBox = document.querySelector("[data-payment-countdown]");
+  const countdownText = document.querySelector("[data-countdown-text]");
+  const payButton = document.querySelector("[data-pay-submit]");
+
+  if (countdownBox && countdownText) {
+    const deadlineMs = Number(countdownBox.dataset.deadlineMs);
+    const serverNowMs = Number(countdownBox.dataset.serverNowMs);
+    const loadedAtMs = Date.now();
+    let reloadQueued = false;
+
+    function currentServerTimeMs() {
+      return serverNowMs + (Date.now() - loadedAtMs);
+    }
+
+    function renderCountdown() {
+      const remainingMs = deadlineMs - currentServerTimeMs();
+      if (remainingMs <= 0) {
+        countdownText.textContent = "已超时";
+        countdownBox.classList.add("expired");
+        if (payButton) payButton.disabled = true;
+        if (!reloadQueued) {
+          reloadQueued = true;
+          setTimeout(() => window.location.reload(), 1200);
+        }
+        return;
+      }
+
+      const totalSeconds = Math.ceil(remainingMs / 1000);
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      countdownText.textContent = minutes + ":" + seconds;
+      countdownBox.classList.toggle("urgent", totalSeconds <= 60);
+    }
+
+    renderCountdown();
+    setInterval(renderCountdown, 1000);
+  }
+</script>
+{% endif %}
 {% endblock %}

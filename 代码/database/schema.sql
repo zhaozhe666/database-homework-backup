@@ -1,6 +1,6 @@
 -- =====================================================================
--- 二手交易平台 数据库结构（MySQL 5.6 兼容）
--- 字符集 utf8mb4，存储引擎 InnoDB（支持外键与事务）
+-- 校园二手交易平台数据库结构（MySQL 5.6 兼容）
+-- 字符集：utf8mb4，存储引擎：InnoDB
 -- =====================================================================
 
 DROP DATABASE IF EXISTS secondhand;
@@ -34,8 +34,9 @@ CREATE TABLE categories (
 
 -- ---------------------------------------------------------------------
 -- 商品表
--- 状态机： on_sale(在售) -> locked(已下单锁定) -> sold(已售出)
---          on_sale -> removed(下架)
+-- 状态机：on_sale(在售) -> locked(已下单锁定) -> sold(已售出)
+--        on_sale -> removed(下架)
+-- image_url 保留为兼容缓存；正式多图关系见 product_images。
 -- ---------------------------------------------------------------------
 CREATE TABLE products (
   id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -45,7 +46,7 @@ CREATE TABLE products (
   description     TEXT COMMENT '描述',
   price           DECIMAL(10,2) NOT NULL COMMENT '售价',
   condition_level VARCHAR(20)  NOT NULL DEFAULT '9成新' COMMENT '新旧程度',
-  image_url       TEXT DEFAULT NULL COMMENT '图片地址，支持多图时用 | 分隔',
+  image_url       TEXT DEFAULT NULL COMMENT '兼容缓存：多图路径用 | 分隔',
   status          ENUM('on_sale','locked','sold','removed') NOT NULL DEFAULT 'on_sale',
   view_count      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '浏览量',
   created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,9 +59,44 @@ CREATE TABLE products (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品';
 
 -- ---------------------------------------------------------------------
+-- 商品图片表：一个商品可有多张图片，可标记封面并排序。
+-- ---------------------------------------------------------------------
+CREATE TABLE product_images (
+  id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  product_id INT UNSIGNED NOT NULL,
+  image_url  VARCHAR(500) NOT NULL COMMENT '图片地址',
+  is_cover   TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否封面',
+  sort_no    INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '排序',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_product_images_product (product_id, sort_no, id),
+  CONSTRAINT fk_product_images_product
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品图片';
+
+-- ---------------------------------------------------------------------
+-- 收藏表：同一用户对同一商品只能收藏一次。
+-- ---------------------------------------------------------------------
+CREATE TABLE favorites (
+  id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id    INT UNSIGNED NOT NULL,
+  product_id INT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_favorites_user_product (user_id, product_id),
+  KEY idx_favorites_user (user_id, created_at),
+  KEY idx_favorites_product (product_id),
+  CONSTRAINT fk_favorites_user
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_favorites_product
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收藏';
+
+-- ---------------------------------------------------------------------
 -- 订单表
--- 状态机： created(待支付) -> paid(已支付/待收货) -> completed(已完成)
---          created -> cancelled(已取消)
+-- 状态机：created(待支付) -> paid(已支付/待收货) -> completed(已完成)
+--        created -> cancelled(已取消)
+--        paid -> refund_requested(退款申请中) -> refunded(已退款)
 -- ---------------------------------------------------------------------
 CREATE TABLE orders (
   id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -69,10 +105,13 @@ CREATE TABLE orders (
   buyer_id     INT UNSIGNED NOT NULL,
   seller_id    INT UNSIGNED NOT NULL,
   amount       DECIMAL(10,2) NOT NULL COMMENT '成交金额',
-  status       ENUM('created','paid','completed','cancelled') NOT NULL DEFAULT 'created',
+  status       ENUM('created','paid','refund_requested','refunded','completed','cancelled') NOT NULL DEFAULT 'created',
   address      VARCHAR(255) DEFAULT NULL COMMENT '收货地址',
+  refund_reason VARCHAR(255) DEFAULT NULL COMMENT '退款原因',
   created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   paid_at      DATETIME     DEFAULT NULL,
+  refund_requested_at DATETIME DEFAULT NULL,
+  refunded_at  DATETIME     DEFAULT NULL,
   completed_at DATETIME     DEFAULT NULL,
   cancelled_at DATETIME     DEFAULT NULL,
   PRIMARY KEY (id),
@@ -99,6 +138,47 @@ CREATE TABLE payments (
   KEY idx_order (order_id),
   CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付流水';
+
+-- ---------------------------------------------------------------------
+-- 评价表：订单完成后，买卖双方可互评。
+-- ---------------------------------------------------------------------
+CREATE TABLE reviews (
+  id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  order_id       INT UNSIGNED NOT NULL,
+  reviewer_id    INT UNSIGNED NOT NULL COMMENT '评价人',
+  target_user_id INT UNSIGNED NOT NULL COMMENT '被评价人',
+  rating         TINYINT UNSIGNED NOT NULL COMMENT '1-5 分',
+  content        VARCHAR(500) DEFAULT NULL COMMENT '评价内容',
+  created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_reviews_order_reviewer (order_id, reviewer_id),
+  KEY idx_reviews_target (target_user_id, created_at),
+  CONSTRAINT fk_review_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  CONSTRAINT fk_review_reviewer FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_review_target FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评价';
+
+-- ---------------------------------------------------------------------
+-- 站内消息表：买卖双方围绕商品沟通。
+-- ---------------------------------------------------------------------
+CREATE TABLE messages (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sender_id   INT UNSIGNED NOT NULL,
+  receiver_id INT UNSIGNED NOT NULL,
+  product_id  INT UNSIGNED DEFAULT NULL,
+  content     VARCHAR(500) NOT NULL,
+  is_read     TINYINT(1) NOT NULL DEFAULT 0,
+  sender_deleted   TINYINT(1) NOT NULL DEFAULT 0 COMMENT '发送方是否隐藏该消息',
+  receiver_deleted TINYINT(1) NOT NULL DEFAULT 0 COMMENT '接收方是否隐藏该消息',
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_messages_receiver_read (receiver_id, is_read, created_at),
+  KEY idx_messages_sender_time (sender_id, created_at),
+  KEY idx_messages_product_time (product_id, created_at),
+  CONSTRAINT fk_message_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_message_receiver FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_message_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内消息';
 
 -- ---------------------------------------------------------------------
 -- 基础分类数据

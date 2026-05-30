@@ -106,6 +106,12 @@ def seed_data():
                     "VALUES (%s, %s, %s, %s, %s, %s, %s)",
                     (user_ids[seller], cat_ids.get(cat), title, desc, price, cond, img),
                 )
+                product_id = cur.lastrowid
+                cur.execute(
+                    "INSERT INTO product_images (product_id, image_url, is_cover, sort_no) "
+                    "VALUES (%s, %s, 1, 0)",
+                    (product_id, img),
+                )
         conn.commit()
     finally:
         conn.close()
