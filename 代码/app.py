@@ -426,6 +426,15 @@ def add_column_if_missing(cur, table_name, column_name, definition):
                 raise
 
 
+def drop_column_if_exists(cur, table_name, column_name):
+    if column_exists(cur, table_name, column_name):
+        try:
+            cur.execute("ALTER TABLE %s DROP COLUMN %s" % (table_name, column_name))
+        except Exception as exc:
+            if getattr(exc, "args", [None])[0] != 1091:
+                raise
+
+
 def sync_order_schema(cur):
     cur.execute(
         "ALTER TABLE orders MODIFY status "
@@ -522,6 +531,7 @@ def ensure_runtime_schema():
                 "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
                 "SELECT id, 1, 1, 1 FROM users WHERE role='admin'"
             )
+            drop_column_if_exists(cur, "users", "role")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS product_images (
