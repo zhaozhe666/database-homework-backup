@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}商品管理 · 二手集市{% endblock %}
+{% block content %}
+<div class="admin-head">
+  <h2 class="page-title">商品管理</h2>
+  <div class="admin-tabs">
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>
+  </div>
+</div>
+
+{% if products %}
+<table class="list-table admin-table">
+  <tr>
+    <th>商品</th><th>卖家</th><th>分类</th><th>价格</th><th>状态</th><th>下架信息</th><th>操作</th>
+  </tr>
+  {% for p in products %}
+  <tr>
+    <td><a href="{{ url_for('product_detail', pid=p.id) }}">{{ p.title }}</a></td>
+    <td>{{ p.seller_name }}</td>
+    <td>{{ p.category_name or '-' }}</td>
+    <td>¥{{ '%.2f'|format(p.price) }}</td>
+    <td><span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span></td>
+    <td>
+      {% if p.removal_reason %}
+        <div class="removed-reason">{{ p.removal_reason }}</div>
+        <div class="muted">{{ p.removed_by_name or '未知' }} · {{ p.removed_at or '-' }}</div>
+      {% else %}
+        <span class="muted">-</span>
+      {% endif %}
+    </td>
+    <td>
+      <div class="admin-actions">
+        {% if p.status in ['on_sale', 'removed'] %}
+          <form action="{{ url_for('admin_remove_product', pid=p.id) }}" method="post" class="admin-inline-form">
+            <input type="text" name="reason" maxlength="255" placeholder="下架原因" required>
+            <button class="btn-outline btn-danger btn-xs" type="submit">下架</button>
+          </form>
+        {% endif %}
+        {% if p.status == 'removed' %}
+          <form action="{{ url_for('admin_restore_product', pid=p.id) }}" method="post">
+            <button class="btn-outline btn-success btn-xs" type="submit">恢复</button>
+          </form>
+        {% endif %}
+        {% if p.status not in ['on_sale', 'removed'] %}
+          <span class="muted">交易中/已售不可操作</span>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+  <div class="empty">暂无商品。</div>
+{% endif %}
+{% endblock %}

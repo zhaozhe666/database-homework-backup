@@ -51,10 +51,11 @@ def run_schema():
 def seed_data():
     """写入演示用户与商品。"""
     users = [
-        # username, password, nickname, phone, balance
-        ("alice", "123456", "爱丽丝", "13800000001", 5000.00),
-        ("bob", "123456", "小波", "13800000002", 5000.00),
-        ("carol", "123456", "卡罗尔", "13800000003", 5000.00),
+        # username, password, nickname, phone, balance, role
+        ("alice", "123456", "爱丽丝", "13800000001", 5000.00, "user"),
+        ("bob", "123456", "小波", "13800000002", 5000.00, "user"),
+        ("carol", "123456", "卡罗尔", "13800000003", 5000.00, "user"),
+        ("admin", "admin123", "平台管理员", "13800000000", 0.00, "admin"),
     ]
     # 商品： seller_username, category_name, title, desc, price, condition, image
     products = [
@@ -86,11 +87,11 @@ def seed_data():
         with conn.cursor() as cur:
             # 用户
             user_ids = {}
-            for username, pwd, nickname, phone, balance in users:
+            for username, pwd, nickname, phone, balance, role in users:
                 cur.execute(
-                    "INSERT INTO users (username, password_hash, nickname, phone, balance) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (username, generate_password_hash(pwd), nickname, phone, balance),
+                    "INSERT INTO users (username, password_hash, nickname, phone, balance, role) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (username, generate_password_hash(pwd), nickname, phone, balance, role),
                 )
                 user_ids[username] = cur.lastrowid
 
@@ -117,6 +118,7 @@ def seed_data():
         conn.close()
     print("[OK] 演示用户与商品写入完成")
     print("     演示账号： alice / bob / carol  密码均为 123456")
+    print("     管理员： admin / admin123")
 
 
 if __name__ == "__main__":

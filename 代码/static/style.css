@@ -1499,6 +1499,73 @@ button, input, textarea, select { font: inherit; }
 
 .row-actions form { margin: 0; }
 
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.admin-tabs,
+.admin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-inline-form input,
+.admin-inline-form select {
+  min-width: 130px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+}
+
+.admin-inline-form input:focus,
+.admin-inline-form select:focus {
+  border-color: #f0a181;
+  box-shadow: 0 0 0 3px rgba(239, 91, 42, .12);
+}
+
+.admin-table td {
+  vertical-align: top;
+}
+
+.removed-reason,
+.removed-notice {
+  margin-top: 6px;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.removed-notice {
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+}
+
+.check-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+}
+
 .favorite-card {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}后台管理 · 二手集市{% endblock %}
+{% block content %}
+<div class="admin-head">
+  <h2 class="page-title">后台管理</h2>
+  <div class="admin-tabs">
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>
+  </div>
+</div>
+
+<div class="me-grid">
+  <a class="me-card" href="{{ url_for('admin_users') }}">
+    <div class="num">{{ stats.users }}</div><div>用户</div>
+  </a>
+  <a class="me-card" href="{{ url_for('admin_products') }}">
+    <div class="num">{{ stats.products }}</div><div>商品</div>
+  </a>
+  <a class="me-card" href="{{ url_for('admin_products') }}">
+    <div class="num">{{ stats.removed_products }}</div><div>已下架</div>
+  </a>
+  <div class="me-card">
+    <div class="num">{{ stats.orders }}</div><div>订单</div>
+  </div>
+</div>
+{% endblock %}

@@ -8,6 +8,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 import db
 from app import app, ensure_runtime_schema
+from werkzeug.security import generate_password_hash
 
 app.config["TESTING"] = True
 client = app.test_client()
@@ -43,6 +44,23 @@ for column in ["sender_deleted", "receiver_deleted"]:
         "WHERE table_schema='secondhand' AND table_name='messages' AND column_name=%s",
         (column,),
     )["c"] == 1
+for column in ["role", "is_active"]:
+    assert db.query_one(
+        "SELECT COUNT(*) c FROM information_schema.columns "
+        "WHERE table_schema='secondhand' AND table_name='users' AND column_name=%s",
+        (column,),
+    )["c"] == 1
+for column in ["removal_reason", "removed_by", "removed_at"]:
+    assert db.query_one(
+        "SELECT COUNT(*) c FROM information_schema.columns "
+        "WHERE table_schema='secondhand' AND table_name='products' AND column_name=%s",
+        (column,),
+    )["c"] == 1
+assert "app_settings" in tables
+assert db.query_one("SELECT role FROM users WHERE username='admin'")["role"] == "admin"
+original_admin_registration_setting = db.query_one(
+    "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",
+)["setting_value"]
 print("用户数:", db.query_one("SELECT COUNT(*) c FROM users")["c"])
 print("分类数:", db.query_one("SELECT COUNT(*) c FROM categories")["c"])
 print("商品数:", db.query_one("SELECT COUNT(*) c FROM products")["c"])
@@ -55,10 +73,18 @@ buyer = {"username": f"b{sfx}", "password": "pass1234",
          "nickname": f"测试买家{sfx}", "phone": f"139{sfx % 100000:05d}2"}
 buyer2 = {"username": f"c{sfx}", "password": "pass1234",
           "nickname": f"测试同学{sfx}", "phone": f"139{sfx % 100000:05d}3"}
+admin = {"username": f"a{sfx}", "password": "pass1234",
+         "nickname": f"测试管理员{sfx}", "phone": f"139{sfx % 100000:05d}4"}
 
 print("注册卖家:", post("/register", **seller).status_code)
 print("注册买家:", post("/register", **buyer).status_code)
 print("注册同学:", post("/register", **buyer2).status_code)
+db.execute(
+    "INSERT INTO users (username, password_hash, nickname, phone, role) "
+    "VALUES (%s, %s, %s, %s, 'admin')",
+    (admin["username"], generate_password_hash(admin["password"]), admin["nickname"], admin["phone"]),
+)
+print("临时管理员创建完成")
 
 post("/login", username=seller["username"], password="pass1234")
 post("/publish", title=f"验证商品{sfx}", description="端到端验证用商品",
@@ -70,6 +96,49 @@ print("发布商品 id =", pid,
       "| 状态 =", db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"])
 assert db.query_one(
     "SELECT COUNT(*) c FROM product_images WHERE product_id=%s", (pid,))["c"] == 1
+client.get("/logout")
+
+post("/login", username=admin["username"], password=admin["password"])
+print("后台首页状态码 =", client.get("/admin").status_code)
+print("后台商品页状态码 =", client.get("/admin/products").status_code)
+post(f"/admin/products/{pid}/remove", reason="测试违规下架")
+admin_removed = db.query_one(
+    "SELECT status, removal_reason, removed_by FROM products WHERE id=%s",
+    (pid,),
+)
+print("管理员下架状态 =", admin_removed["status"], "| 原因 =", admin_removed["removal_reason"])
+assert admin_removed["status"] == "removed"
+assert admin_removed["removal_reason"] == "测试违规下架"
+client.get("/logout")
+
+post("/login", username=seller["username"], password="pass1234")
+post(f"/product/{pid}/restore")
+assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "removed"
+print("卖家查看被管理员下架商品页状态码 =", client.get(f"/product/{pid}").status_code)
+client.get("/logout")
+
+post("/login", username=admin["username"], password=admin["password"])
+post(f"/admin/products/{pid}/restore")
+assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "on_sale"
+print("管理员恢复商品 OK")
+print("后台用户页状态码 =", client.get("/admin/users").status_code)
+seller_id_for_admin = db.query_one("SELECT id FROM users WHERE username=%s", (seller["username"],))["id"]
+post(f"/admin/users/{seller_id_for_admin}/role", role="admin")
+assert db.query_one("SELECT role FROM users WHERE id=%s", (seller_id_for_admin,))["role"] == "admin"
+post(f"/admin/users/{seller_id_for_admin}/role", role="user")
+assert db.query_one("SELECT role FROM users WHERE id=%s", (seller_id_for_admin,))["role"] == "user"
+post("/admin/settings", admin_registration_enabled="1")
+assert db.query_one(
+    "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",
+)["setting_value"] == "1"
+print("管理员注册开关打开后页面 =", client.get("/admin/register").status_code)
+post("/admin/settings")
+if original_admin_registration_setting == "1":
+    post("/admin/settings", admin_registration_enabled="1")
+assert db.query_one(
+    "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",
+)["setting_value"] == original_admin_registration_setting
+print("用户权限和注册开关 OK")
 client.get("/logout")
 
 post("/login", username=buyer["username"], password="pass1234")
@@ -180,6 +249,6 @@ for oid in [timeout_oid, refund_oid, complete_oid]:
 db.execute("DELETE FROM messages WHERE product_id=%s", (pid,))
 db.execute("DELETE FROM favorites WHERE product_id=%s", (pid,))
 db.execute("DELETE FROM products WHERE id=%s", (pid,))
-db.execute("DELETE FROM users WHERE username IN (%s,%s,%s)",
-           (buyer["username"], seller["username"], buyer2["username"]))
+db.execute("DELETE FROM users WHERE username IN (%s,%s,%s,%s)",
+           (buyer["username"], seller["username"], buyer2["username"], admin["username"]))
 print("清理完成，超时取消、退款、评价和消息全部通过 OK")

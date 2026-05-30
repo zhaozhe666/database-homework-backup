@@ -11,7 +11,12 @@
     <td><a href="{{ url_for('product_detail', pid=p.id) }}">{{ p.title }}</a></td>
     <td>{{ p.category_name or '-' }}</td>
     <td>¥{{ '%.2f'|format(p.price) }}</td>
-    <td><span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span></td>
+    <td>
+      <span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span>
+      {% if p.status == 'removed' and p.removal_reason %}
+        <div class="removed-reason">原因：{{ p.removal_reason }}</div>
+      {% endif %}
+    </td>
     <td>{{ p.view_count }}</td>
     <td>
       <div class="row-actions">
@@ -21,9 +26,13 @@
         <button class="btn-outline btn-xs" type="submit">下架</button>
       </form>
       {% elif p.status == 'removed' %}
-      <form action="{{ url_for('restore_product', pid=p.id) }}" method="post">
-        <button class="btn-outline btn-success btn-xs" type="submit">重新上架</button>
-      </form>
+        {% if p.removed_by and p.removed_by != current_user.id %}
+          <span class="muted">管理员下架</span>
+        {% else %}
+          <form action="{{ url_for('restore_product', pid=p.id) }}" method="post">
+            <button class="btn-outline btn-success btn-xs" type="submit">重新上架</button>
+          </form>
+        {% endif %}
       {% endif %}
       {% if p.status != 'locked' and order_count == 0 %}
       <form action="{{ url_for('delete_product', pid=p.id) }}" method="post" onsubmit="return confirm('确定删除这个商品吗？删除后不可恢复。');">

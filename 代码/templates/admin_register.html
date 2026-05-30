@@ -1,18 +1,15 @@
 {% extends "base.html" %}
-{% block title %}注册 · 二手集市{% endblock %}
+{% block title %}注册管理员 · 二手集市{% endblock %}
 {% block content %}
 <div class="auth-box">
-  <h2>注册</h2>
+  <h2>注册管理员</h2>
   <form method="post">
     <label>账号<input type="text" name="username" required></label>
     <label>密码<input type="password" name="password" required></label>
     <label>昵称<input type="text" name="nickname" required></label>
     <label>手机号<input type="text" name="phone"></label>
-    <button type="submit" class="btn-primary">注册</button>
+    <button type="submit" class="btn-primary">注册管理员</button>
   </form>
   <p class="auth-switch">已有账号？<a href="{{ url_for('login') }}">去登录</a></p>
-  {% if admin_registration_enabled %}
-    <p class="auth-switch">管理员入口已开放：<a href="{{ url_for('admin_register') }}">注册管理员</a></p>
-  {% endif %}
 </div>
 {% endblock %}

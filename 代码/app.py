@@ -42,6 +42,10 @@ PRODUCT_STATUS = {
     "sold": "已售出",
     "removed": "已下架",
 }
+USER_ROLES = {
+    "user": "普通用户",
+    "admin": "管理员",
+}
 ORDER_STATUS = {
     "created": "待支付",
     "paid": "待收货",
@@ -61,6 +65,23 @@ def current_user():
     if not uid:
         return None
     return query_one("SELECT * FROM users WHERE id=%s", (uid,))
+
+
+def is_admin(user=None):
+    user = user or current_user()
+    return bool(user and user.get("role") == "admin")
+
+
+def get_setting(key, default=""):
+    row = query_one(
+        "SELECT setting_value FROM app_settings WHERE setting_key=%s",
+        (key,),
+    )
+    return row["setting_value"] if row else default
+
+
+def admin_registration_enabled():
+    return get_setting("admin_registration_enabled", "0") == "1"
 
 
 def notification_summary(user_id):
@@ -88,6 +109,8 @@ def inject_globals():
     return {
         "current_user": user,
         "notification_summary": notification_summary(user["id"]) if user else None,
+        "USER_ROLES": USER_ROLES,
+        "admin_registration_enabled": admin_registration_enabled(),
         "PRODUCT_STATUS": PRODUCT_STATUS,
         "ORDER_STATUS": ORDER_STATUS,
         "image_urls": image_urls,
@@ -98,9 +121,24 @@ def inject_globals():
 def login_required(view):
     @functools.wraps(view)
     def wrapped(*args, **kwargs):
-        if not session.get("user_id"):
+        user = current_user()
+        if not user:
             flash("请先登录", "warning")
             return redirect(url_for("login", next=request.path))
+        if not user.get("is_active", 1):
+            session.clear()
+            flash("账号已被停用，请联系管理员", "danger")
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    @functools.wraps(view)
+    @login_required
+    def wrapped(*args, **kwargs):
+        if not is_admin():
+            abort(403)
         return view(*args, **kwargs)
     return wrapped
 
@@ -387,7 +425,42 @@ def ensure_runtime_schema():
     if RUNTIME_SCHEMA_READY:
         return
     with get_cursor(commit=True) as cur:
+        add_column_if_missing(
+            cur, "users", "role",
+            "ENUM('user','admin') NOT NULL DEFAULT 'user' COMMENT '用户角色'",
+        )
+        add_column_if_missing(
+            cur, "users", "is_active",
+            "TINYINT(1) NOT NULL DEFAULT 1 COMMENT '账号是否启用'",
+        )
+        add_column_if_missing(
+            cur, "products", "removal_reason",
+            "VARCHAR(255) DEFAULT NULL COMMENT '下架原因'",
+        )
+        add_column_if_missing(
+            cur, "products", "removed_by",
+            "INT UNSIGNED DEFAULT NULL COMMENT '下架操作人'",
+        )
+        add_column_if_missing(
+            cur, "products", "removed_at",
+            "DATETIME DEFAULT NULL COMMENT '下架时间'",
+        )
         sync_order_schema(cur)
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+              setting_key VARCHAR(80) NOT NULL,
+              setting_value VARCHAR(255) NOT NULL,
+              updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (setting_key)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        cur.execute(
+            "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (%s, %s)",
+            ("admin_registration_enabled", "0"),
+        )
+        cur.execute("UPDATE users SET role='admin', is_active=1 WHERE username='admin'")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS product_images (
@@ -483,7 +556,7 @@ def ensure_runtime_schema():
                     "VALUES (%s, %s, %s, %s)",
                     (product["id"], url, 1 if index == 0 else 0, index),
                 )
-    RUNTIME_SCHEMA_READY = True
+        RUNTIME_SCHEMA_READY = True
 
 
 @app.before_request
@@ -668,6 +741,9 @@ def login():
         if not user or not check_password_hash(user["password_hash"], password):
             flash("账号或密码错误", "danger")
             return render_template("login.html")
+        if not user.get("is_active", 1):
+            flash("账号已被停用，请联系管理员", "danger")
+            return render_template("login.html")
         session["user_id"] = user["id"]
         flash("登录成功，欢迎 %s" % user["nickname"], "success")
         next_url = request.args.get("next") or url_for("index")
@@ -680,6 +756,194 @@ def logout():
     session.clear()
     flash("已退出登录", "info")
     return redirect(url_for("index"))
+
+
+# --------------------------------------------------------------------- #
+# 管理员后台
+# --------------------------------------------------------------------- #
+@app.route("/admin")
+@admin_required
+def admin_dashboard():
+    stats = {
+        "users": query_one("SELECT COUNT(*) AS c FROM users")["c"],
+        "products": query_one("SELECT COUNT(*) AS c FROM products")["c"],
+        "removed_products": query_one("SELECT COUNT(*) AS c FROM products WHERE status='removed'")["c"],
+        "orders": query_one("SELECT COUNT(*) AS c FROM orders")["c"],
+    }
+    return render_template("admin_dashboard.html", stats=stats)
+
+
+@app.route("/admin/products")
+@admin_required
+def admin_products():
+    products = hydrate_product_images(query_all(
+        "SELECT p.*, c.name AS category_name, u.nickname AS seller_name, "
+        "rb.nickname AS removed_by_name "
+        "FROM products p "
+        "LEFT JOIN categories c ON p.category_id = c.id "
+        "JOIN users u ON p.seller_id = u.id "
+        "LEFT JOIN users rb ON p.removed_by = rb.id "
+        "ORDER BY p.created_at DESC",
+    ))
+    return render_template("admin_products.html", products=products)
+
+
+@app.route("/admin/products/<int:pid>/remove", methods=["POST"])
+@admin_required
+def admin_remove_product(pid):
+    reason = request.form.get("reason", "").strip()
+    if not reason:
+        flash("管理员下架商品必须填写原因", "danger")
+        return redirect(url_for("admin_products"))
+    if len(reason) > 255:
+        flash("下架原因最多 255 字", "danger")
+        return redirect(url_for("admin_products"))
+
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product:
+        abort(404)
+    if product["status"] not in ("on_sale", "removed"):
+        flash("交易中或已售出的商品不能由后台直接下架", "warning")
+        return redirect(url_for("admin_products"))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE products SET status='removed', removal_reason=%s, "
+            "removed_by=%s, removed_at=NOW() WHERE id=%s",
+            (reason, session["user_id"], pid),
+        )
+    flash("商品已由管理员下架", "success")
+    return redirect(url_for("admin_products"))
+
+
+@app.route("/admin/products/<int:pid>/restore", methods=["POST"])
+@admin_required
+def admin_restore_product(pid):
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product:
+        abort(404)
+    if product["status"] != "removed":
+        flash("只有已下架商品可以恢复", "warning")
+        return redirect(url_for("admin_products"))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE products SET status='on_sale', removal_reason=NULL, "
+            "removed_by=NULL, removed_at=NULL WHERE id=%s",
+            (pid,),
+        )
+    flash("商品已恢复上架", "success")
+    return redirect(url_for("admin_products"))
+
+
+@app.route("/admin/users")
+@admin_required
+def admin_users():
+    users = query_all(
+        "SELECT u.*, "
+        "(SELECT COUNT(*) FROM products p WHERE p.seller_id=u.id) AS product_count, "
+        "(SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id OR o.seller_id=u.id) AS order_count "
+        "FROM users u ORDER BY u.created_at DESC"
+    )
+    admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
+    return render_template("admin_users.html", users=users, admin_count=admin_count)
+
+
+@app.route("/admin/users/<int:uid>/role", methods=["POST"])
+@admin_required
+def admin_update_user_role(uid):
+    role = request.form.get("role")
+    if role not in USER_ROLES:
+        flash("用户角色不正确", "danger")
+        return redirect(url_for("admin_users"))
+
+    user = query_one("SELECT * FROM users WHERE id=%s", (uid,))
+    if not user:
+        abort(404)
+    if uid == session["user_id"] and role != "admin":
+        flash("不能取消自己的管理员权限", "warning")
+        return redirect(url_for("admin_users"))
+    if user["role"] == "admin" and role != "admin":
+        admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
+        if admin_count <= 1:
+            flash("至少要保留一个启用的管理员", "warning")
+            return redirect(url_for("admin_users"))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE users SET role=%s WHERE id=%s", (role, uid))
+    flash("用户权限已更新", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/users/<int:uid>/status", methods=["POST"])
+@admin_required
+def admin_toggle_user_status(uid):
+    user = query_one("SELECT * FROM users WHERE id=%s", (uid,))
+    if not user:
+        abort(404)
+    if uid == session["user_id"]:
+        flash("不能停用自己的账号", "warning")
+        return redirect(url_for("admin_users"))
+    if user["role"] == "admin" and user.get("is_active", 1):
+        admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
+        if admin_count <= 1:
+            flash("至少要保留一个启用的管理员", "warning")
+            return redirect(url_for("admin_users"))
+
+    new_status = 0 if user.get("is_active", 1) else 1
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE users SET is_active=%s WHERE id=%s", (new_status, uid))
+    flash("账号状态已更新", "success")
+    return redirect(url_for("admin_users"))
+
+
+@app.route("/admin/settings", methods=["GET", "POST"])
+@admin_required
+def admin_settings():
+    if request.method == "POST":
+        enabled = "1" if request.form.get("admin_registration_enabled") == "1" else "0"
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE app_settings SET setting_value=%s "
+                "WHERE setting_key='admin_registration_enabled'",
+                (enabled,),
+            )
+        flash("管理员注册权限已更新", "success")
+        return redirect(url_for("admin_settings"))
+    return render_template(
+        "admin_settings.html",
+        admin_registration_enabled=admin_registration_enabled(),
+    )
+
+
+@app.route("/admin/register", methods=["GET", "POST"])
+def admin_register():
+    if not admin_registration_enabled():
+        flash("管理员注册入口已关闭", "warning")
+        return redirect(url_for("register"))
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        nickname = request.form.get("nickname", "").strip()
+        phone = request.form.get("phone", "").strip()
+
+        if not username or not password or not nickname:
+            flash("账号、密码、昵称不能为空", "danger")
+            return render_template("admin_register.html")
+        if query_one("SELECT id FROM users WHERE username=%s", (username,)):
+            flash("该账号已被注册", "danger")
+            return render_template("admin_register.html")
+
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO users (username, password_hash, nickname, phone, role) "
+                "VALUES (%s, %s, %s, %s, 'admin')",
+                (username, generate_password_hash(password), nickname, phone or None),
+            )
+        flash("管理员注册成功，请登录", "success")
+        return redirect(url_for("login"))
+    return render_template("admin_register.html")
 
 
 # --------------------------------------------------------------------- #
@@ -783,7 +1047,11 @@ def remove_product(pid):
         flash("该商品当前状态无法下架", "warning")
         return redirect(url_for("my_selling"))
     with get_cursor(commit=True) as cur:
-        cur.execute("UPDATE products SET status='removed' WHERE id=%s", (pid,))
+        cur.execute(
+            "UPDATE products SET status='removed', removal_reason=NULL, "
+            "removed_by=%s, removed_at=NOW() WHERE id=%s",
+            (session["user_id"], pid),
+        )
     flash("商品已下架", "info")
     return redirect(url_for("my_selling"))
 
@@ -797,8 +1065,15 @@ def restore_product(pid):
     if product["status"] != "removed":
         flash("只有已下架商品可以重新上架", "warning")
         return redirect(url_for("my_selling"))
+    if product.get("removed_by") and product["removed_by"] != session["user_id"]:
+        flash("该商品由管理员下架，需管理员恢复后才能重新上架", "warning")
+        return redirect(url_for("my_selling"))
     with get_cursor(commit=True) as cur:
-        cur.execute("UPDATE products SET status='on_sale' WHERE id=%s", (pid,))
+        cur.execute(
+            "UPDATE products SET status='on_sale', removal_reason=NULL, "
+            "removed_by=NULL, removed_at=NULL WHERE id=%s",
+            (pid,),
+        )
     flash("商品已重新上架", "success")
     return redirect(url_for("my_selling"))
 
@@ -811,6 +1086,9 @@ def delete_product(pid):
         abort(403)
     if product["status"] == "locked":
         flash("交易中的商品不能删除", "warning")
+        return redirect(url_for("my_selling"))
+    if product["status"] == "removed" and product.get("removed_by") and product["removed_by"] != session["user_id"]:
+        flash("该商品由管理员下架，不能自行删除", "warning")
         return redirect(url_for("my_selling"))
 
     order_count = query_one(

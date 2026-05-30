@@ -17,6 +17,8 @@ CREATE TABLE users (
   nickname      VARCHAR(50)  NOT NULL COMMENT '昵称',
   phone         VARCHAR(20)  DEFAULT NULL COMMENT '联系电话',
   balance       DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '钱包余额',
+  role          ENUM('user','admin') NOT NULL DEFAULT 'user' COMMENT '用户角色',
+  is_active     TINYINT(1) NOT NULL DEFAULT 1 COMMENT '账号是否启用',
   created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_username (username)
@@ -48,6 +50,9 @@ CREATE TABLE products (
   condition_level VARCHAR(20)  NOT NULL DEFAULT '9成新' COMMENT '新旧程度',
   image_url       TEXT DEFAULT NULL COMMENT '兼容缓存：多图路径用 | 分隔',
   status          ENUM('on_sale','locked','sold','removed') NOT NULL DEFAULT 'on_sale',
+  removal_reason  VARCHAR(255) DEFAULT NULL COMMENT '下架原因',
+  removed_by      INT UNSIGNED DEFAULT NULL COMMENT '下架操作人',
+  removed_at      DATETIME DEFAULT NULL COMMENT '下架时间',
   view_count      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '浏览量',
   created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -138,6 +143,19 @@ CREATE TABLE payments (
   KEY idx_order (order_id),
   CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付流水';
+
+-- ---------------------------------------------------------------------
+-- 系统设置表：用于管理员注册开关等后台配置。
+-- ---------------------------------------------------------------------
+CREATE TABLE app_settings (
+  setting_key   VARCHAR(80) NOT NULL,
+  setting_value VARCHAR(255) NOT NULL,
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (setting_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统设置';
+
+INSERT INTO app_settings (setting_key, setting_value) VALUES
+('admin_registration_enabled', '0');
 
 -- ---------------------------------------------------------------------
 -- 评价表：订单完成后，买卖双方可互评。
