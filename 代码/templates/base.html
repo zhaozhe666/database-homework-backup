@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}校园二手交易平台{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="navbar">
+    <div class="nav-inner">
+      <a class="brand" href="{{ url_for('index') }}">🛍️ 二手集市</a>
+      <form class="search" action="{{ url_for('index') }}" method="get">
+        <input type="text" name="q" placeholder="搜索想要的宝贝…" value="{{ keyword or '' }}">
+        <button type="submit">搜索</button>
+      </form>
+      <nav class="nav-links">
+        <a href="{{ url_for('index') }}">首页</a>
+        {% if current_user %}
+          <a href="{{ url_for('publish') }}">发布闲置</a>
+          <a href="{{ url_for('me') }}">个人中心</a>
+          <span class="wallet">余额 ¥{{ '%.2f'|format(current_user.balance) }}</span>
+          <span class="hi">{{ current_user.nickname }}</span>
+          <a class="btn-sm" href="{{ url_for('logout') }}">退出</a>
+        {% else %}
+          <a href="{{ url_for('login') }}">登录</a>
+          <a class="btn-sm" href="{{ url_for('register') }}">注册</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, msg in messages %}
+            <div class="flash flash-{{ category }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>校园二手交易平台 · 数据库课程设计 · MySQL + Flask</p>
+  </footer>
+</body>
+</html>

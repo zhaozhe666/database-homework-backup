@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}我的发布 - 校园二手{% endblock %}
+{% block content %}
+  <h2 class="section-title">我的发布</h2>
+  {% if products %}
+    <table class="list">
+      <thead>
+        <tr><th>商品</th><th>分类</th><th>价格</th><th>状态</th><th>浏览</th><th>操作</th></tr>
+      </thead>
+      <tbody>
+        {% for p in products %}
+          <tr>
+            <td><a href="{{ url_for('product_detail', product_id=p.product_id) }}">{{ p.title }}</a></td>
+            <td>{{ p.category_name }}</td>
+            <td>¥{{ '%.2f'|format(p.price) }}</td>
+            <td><span class="badge {{ p.status }}">{{ {'on_sale':'在售','reserved':'已预订','sold':'已售出','removed':'已下架','draft':'草稿'}[p.status] }}</span></td>
+            <td>{{ p.view_count }}</td>
+            <td class="row-actions">
+              {% if p.status in ['on_sale','draft'] %}
+                <form method="post" action="{{ url_for('remove_product', product_id=p.product_id) }}">
+                  <button class="btn btn-sm btn-muted" type="submit">下架</button>
+                </form>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="empty">你还没有发布过商品，<a href="{{ url_for('publish') }}">去发布</a>。</div>
+  {% endif %}
+{% endblock %}

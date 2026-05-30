@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ product.title }} · 二手集市{% endblock %}
+{% block content %}
+<div class="detail">
+  <div class="detail-img">
+    {% if product.image_url %}
+      <img src="{{ product.image_url }}" alt="{{ product.title }}">
+    {% else %}
+      <div class="no-img big">暂无图片</div>
+    {% endif %}
+  </div>
+  <div class="detail-info">
+    <h1>{{ product.title }}</h1>
+    <div class="detail-price">¥{{ '%.2f'|format(product.price) }}</div>
+    <ul class="detail-meta">
+      <li><b>分类：</b>{{ product.category_name or '未分类' }}</li>
+      <li><b>成色：</b>{{ product.condition_level }}</li>
+      <li><b>卖家：</b>{{ product.seller_name }}</li>
+      <li><b>状态：</b>{{ PRODUCT_STATUS[product.status] }}</li>
+      <li><b>浏览：</b>{{ product.view_count }} 次</li>
+    </ul>
+    <div class="detail-desc">{{ product.description or '卖家很懒，没有填写描述。' }}</div>
+
+    {% if product.status == 'on_sale' %}
+      {% if current_user and current_user.id != product.seller_id %}
+        <form action="{{ url_for('create_order') }}" method="post" class="buy-form">
+          <input type="hidden" name="product_id" value="{{ product.id }}">
+          <input type="text" name="address" placeholder="填写收货地址（选填）">
+          <button type="submit" class="btn-primary">立即购买</button>
+        </form>
+      {% elif current_user and current_user.id == product.seller_id %}
+        <p class="own-tip">这是你发布的商品</p>
+      {% else %}
+        <a class="btn-primary" href="{{ url_for('login') }}">登录后购买</a>
+      {% endif %}
+    {% else %}
+      <button class="btn-disabled" disabled>{{ PRODUCT_STATUS[product.status] }}</button>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,139 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+  background: #f5f6f8; color: #333; line-height: 1.6;
+}
+a { color: inherit; text-decoration: none; }
+
+/* 顶部导航 */
+.navbar { background: #fff; box-shadow: 0 1px 6px rgba(0,0,0,.06); position: sticky; top: 0; z-index: 10; }
+.nav-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 18px; padding: 12px 16px; }
+.brand { font-size: 22px; font-weight: 700; color: #ff5722; white-space: nowrap; }
+.search { flex: 1; display: flex; max-width: 460px; }
+.search input { flex: 1; padding: 9px 12px; border: 1px solid #ddd; border-radius: 20px 0 0 20px; outline: none; }
+.search button { padding: 9px 20px; border: none; background: #ff5722; color: #fff; border-radius: 0 20px 20px 0; cursor: pointer; }
+.nav-links { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
+.nav-links a:hover { color: #ff5722; }
+.wallet { color: #ff8f00; font-weight: 600; }
+.hi { color: #666; }
+.btn-sm { padding: 5px 12px; background: #ff5722; color: #fff !important; border-radius: 16px; }
+
+/* 容器 */
+.container { max-width: 1100px; margin: 20px auto; padding: 0 16px; min-height: 60vh; }
+.footer { text-align: center; color: #999; padding: 24px; font-size: 13px; }
+
+/* flash 提示 */
+.flashes { margin-bottom: 16px; }
+.flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
+.flash-success { background: #e6f7ec; color: #1a7f37; }
+.flash-danger  { background: #fdecea; color: #c0392b; }
+.flash-warning { background: #fff7e6; color: #b26a00; }
+.flash-info    { background: #eaf2fd; color: #1565c0; }
+
+/* 分类栏 */
+.cat-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.cat { padding: 6px 16px; background: #fff; border-radius: 18px; font-size: 14px; border: 1px solid #eee; }
+.cat.active, .cat:hover { background: #ff5722; color: #fff; border-color: #ff5722; }
+.result-tip { margin-bottom: 12px; color: #666; }
+
+/* 商品网格 */
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.card { background: #fff; border-radius: 12px; overflow: hidden; transition: .2s; display: block; }
+.card:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,.1); }
+.card-img { position: relative; aspect-ratio: 4/3; background: #f0f0f0; }
+.card-img img { width: 100%; height: 100%; object-fit: cover; }
+.no-img { display: flex; align-items: center; justify-content: center; height: 100%; color: #bbb; }
+.no-img.big { height: 360px; font-size: 18px; }
+.tag { position: absolute; top: 8px; left: 8px; padding: 2px 8px; border-radius: 10px; font-size: 12px; color: #fff; }
+.tag-locked { background: #ff9800; }
+.card-body { padding: 10px 12px; }
+.card-title { font-size: 14px; height: 44px; overflow: hidden; }
+.card-meta { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+.price { color: #ff5722; font-weight: 700; font-size: 18px; }
+.cond { font-size: 12px; color: #888; background: #f5f5f5; padding: 1px 6px; border-radius: 4px; }
+.card-foot { display: flex; justify-content: space-between; font-size: 12px; color: #999; }
+.empty { text-align: center; padding: 60px; color: #999; }
+.empty a { color: #ff5722; }
+
+/* 商品详情 */
+.detail { display: grid; grid-template-columns: 460px 1fr; gap: 30px; background: #fff; padding: 24px; border-radius: 12px; }
+.detail-img img { width: 100%; border-radius: 10px; }
+.detail-info h1 { font-size: 22px; margin-bottom: 12px; }
+.detail-price { color: #ff5722; font-size: 30px; font-weight: 700; margin-bottom: 16px; }
+.detail-meta { list-style: none; margin-bottom: 16px; }
+.detail-meta li { padding: 5px 0; color: #555; border-bottom: 1px dashed #eee; }
+.detail-desc { background: #fafafa; padding: 14px; border-radius: 8px; color: #555; margin-bottom: 20px; white-space: pre-wrap; }
+.buy-form { display: flex; gap: 10px; }
+.buy-form input { flex: 1; padding: 11px; border: 1px solid #ddd; border-radius: 8px; }
+.own-tip { color: #888; background: #fafafa; padding: 10px; border-radius: 8px; }
+
+/* 按钮 */
+.btn-primary { padding: 11px 26px; background: #ff5722; color: #fff !important; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; }
+.btn-primary:hover { background: #f4511e; }
+.btn-outline { padding: 9px 20px; background: #fff; color: #ff5722; border: 1px solid #ff5722; border-radius: 8px; cursor: pointer; }
+.btn-disabled { padding: 11px 26px; background: #ccc; color: #fff; border: none; border-radius: 8px; }
+.btn-xs { padding: 4px 12px; font-size: 13px; }
+
+/* 表单/认证卡片 */
+.auth-box, .form-box { max-width: 420px; margin: 20px auto; background: #fff; padding: 28px; border-radius: 12px; }
+.form-box { max-width: 560px; }
+.auth-box h2, .form-box h2 { margin-bottom: 18px; }
+.auth-box label, .form-box label { display: block; margin-bottom: 14px; font-size: 14px; color: #555; }
+.auth-box input, .form-box input, .form-box select, .form-box textarea {
+  width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #ddd; border-radius: 8px; outline: none; font-size: 14px;
+}
+.form-row { display: flex; gap: 14px; }
+.form-row label { flex: 1; }
+.auth-switch { margin-top: 14px; font-size: 14px; color: #666; }
+.auth-switch a { color: #ff5722; }
+.auth-tip { margin-top: 10px; font-size: 12px; color: #aaa; }
+
+/* 订单 */
+.order-box { max-width: 720px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 12px; }
+.order-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.status { padding: 4px 12px; border-radius: 14px; font-size: 13px; color: #fff; }
+.status-created { background: #ff9800; }
+.status-paid { background: #2196f3; }
+.status-completed { background: #4caf50; }
+.status-cancelled { background: #9e9e9e; }
+.status-prod-on_sale { background: #4caf50; }
+.status-prod-locked { background: #ff9800; }
+.status-prod-sold { background: #9e9e9e; }
+.status-prod-removed { background: #bdbdbd; }
+.order-item { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; }
+.order-thumb { width: 90px; height: 90px; border-radius: 8px; overflow: hidden; background: #f0f0f0; flex-shrink: 0; }
+.order-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.order-title { font-size: 16px; font-weight: 600; }
+.amount { color: #ff5722; font-weight: 700; margin-top: 6px; }
+.order-meta { list-style: none; margin: 16px 0; }
+.order-meta li { padding: 5px 0; color: #555; }
+.order-actions { display: flex; gap: 12px; margin-top: 10px; }
+.pay-list { margin-top: 22px; }
+.pay-list table, .list-table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+.pay-list th, .pay-list td, .list-table th, .list-table td { padding: 10px; border-bottom: 1px solid #f0f0f0; text-align: left; font-size: 14px; }
+.list-table { border-radius: 12px; overflow: hidden; }
+.list-table th { background: #fafafa; }
+.list-table a { color: #1565c0; }
+
+/* 个人中心 */
+.page-title { margin-bottom: 16px; }
+.me-head { display: flex; align-items: center; gap: 16px; background: #fff; padding: 22px; border-radius: 12px; margin-bottom: 18px; }
+.me-avatar { width: 60px; height: 60px; border-radius: 50%; background: #ff5722; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.me-sub { color: #999; font-size: 13px; }
+.me-wallet { margin-left: auto; text-align: right; }
+.wallet-amt { color: #ff8f00; font-size: 22px; font-weight: 700; }
+.me-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.me-card { background: #fff; padding: 26px; border-radius: 12px; text-align: center; color: #666; }
+.me-card:hover { box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+.me-card .num { font-size: 30px; font-weight: 700; color: #ff5722; margin-bottom: 6px; }
+
+/* 错误页 */
+.error-box { text-align: center; padding: 60px; }
+.error-code { font-size: 72px; font-weight: 700; color: #ff5722; }
+.error-box p { color: #777; margin: 10px 0 24px; }
+
+@media (max-width: 900px) {
+  .grid, .me-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail { grid-template-columns: 1fr; }
+  .nav-inner { flex-wrap: wrap; }
+}

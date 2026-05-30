@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} · 二手集市{% endblock %}
+{% block content %}
+<div class="error-box">
+  <div class="error-code">{{ code }}</div>
+  <p>{{ message }}</p>
+  <a class="btn-primary" href="{{ url_for('index') }}">返回首页</a>
+</div>
+{% endblock %}

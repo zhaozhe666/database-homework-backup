@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}订单详情 · 二手集市{% endblock %}
+{% block content %}
+{% set is_buyer = current_user.id == order.buyer_id %}
+<div class="order-box">
+  <div class="order-head">
+    <h2>订单详情</h2>
+    <span class="status status-{{ order.status }}">{{ ORDER_STATUS[order.status] }}</span>
+  </div>
+
+  <div class="order-item">
+    <div class="order-thumb">
+      {% if order.image_url %}<img src="{{ order.image_url }}" alt="">{% else %}<div class="no-img">无图</div>{% endif %}
+    </div>
+    <div class="order-item-info">
+      <a class="order-title" href="{{ url_for('product_detail', pid=order.product_id) }}">{{ order.title }}</a>
+      <div class="cond">{{ order.condition_level }}</div>
+      <div class="amount">成交金额：¥{{ '%.2f'|format(order.amount) }}</div>
+    </div>
+  </div>
+
+  <ul class="order-meta">
+    <li><b>订单号：</b>{{ order.order_no }}</li>
+    <li><b>买家：</b>{{ order.buyer_name }}</li>
+    <li><b>卖家：</b>{{ order.seller_name }}</li>
+    {% if order.status in ('paid','completed') %}
+      <li><b>卖家联系方式：</b>{{ order.seller_phone or '未填写' }}</li>
+    {% endif %}
+    <li><b>收货地址：</b>{{ order.address or '未填写' }}</li>
+    <li><b>下单时间：</b>{{ order.created_at }}</li>
+    {% if order.paid_at %}<li><b>支付时间：</b>{{ order.paid_at }}</li>{% endif %}
+    {% if order.completed_at %}<li><b>完成时间：</b>{{ order.completed_at }}</li>{% endif %}
+    {% if order.cancelled_at %}<li><b>取消时间：</b>{{ order.cancelled_at }}</li>{% endif %}
+  </ul>
+
+  <div class="order-actions">
+    {% if order.status == 'created' and is_buyer %}
+      <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" style="display:inline">
+        <button class="btn-primary">余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'created' %}
+      <form action="{{ url_for('cancel_order', oid=order.id) }}" method="post" style="display:inline">
+        <button class="btn-outline">取消订单</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'paid' and is_buyer %}
+      <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
+        <button class="btn-primary">确认收货</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'paid' and not is_buyer %}
+      <p class="own-tip">买家已付款（平台托管中），请尽快发货，待买家确认收货后到账。</p>
+    {% endif %}
+  </div>
+
+  {% if payments %}
+  <div class="pay-list">
+    <h3>支付流水</h3>
+    <table>
+      <tr><th>流水号</th><th>金额</th><th>方式</th><th>状态</th><th>时间</th></tr>
+      {% for pm in payments %}
+      <tr>
+        <td>{{ pm.id }}</td>
+        <td>¥{{ '%.2f'|format(pm.amount) }}</td>
+        <td>{{ pm.method }}</td>
+        <td>{{ pm.status }}</td>
+        <td>{{ pm.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

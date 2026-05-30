@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}个人中心 · 二手集市{% endblock %}
+{% block content %}
+<div class="me-head">
+  <div class="me-avatar">{{ current_user.nickname[0] }}</div>
+  <div>
+    <h2>{{ current_user.nickname }}</h2>
+    <p class="me-sub">账号：{{ current_user.username }} · 手机：{{ current_user.phone or '未填写' }}</p>
+  </div>
+  <div class="me-wallet">
+    <div class="wallet-amt">¥{{ '%.2f'|format(current_user.balance) }}</div>
+    <a class="btn-sm" href="{{ url_for('recharge') }}">充值</a>
+  </div>
+</div>
+
+<div class="me-grid">
+  <a class="me-card" href="{{ url_for('my_selling') }}">
+    <div class="num">{{ selling_cnt }}</div><div>在售商品</div>
+  </a>
+  <a class="me-card" href="{{ url_for('my_bought') }}">
+    <div class="num">{{ bought_cnt }}</div><div>我买到的</div>
+  </a>
+  <a class="me-card" href="{{ url_for('my_sold') }}">
+    <div class="num">{{ sold_cnt }}</div><div>我卖出的</div>
+  </a>
+  <a class="me-card" href="{{ url_for('publish') }}">
+    <div class="num">＋</div><div>发布闲置</div>
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}钱包充值 · 二手集市{% endblock %}
+{% block content %}
+<div class="form-box">
+  <h2>钱包充值</h2>
+  <p class="me-sub">当前余额：¥{{ '%.2f'|format(current_user.balance) }}</p>
+  <form method="post">
+    <label>充值金额(元)<input type="number" name="amount" step="0.01" min="0.01" required></label>
+    <button type="submit" class="btn-primary">确认充值</button>
+  </form>
+  <p class="auth-tip">说明：演示环境直接增加余额，无真实支付。</p>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}发布闲置 · 二手集市{% endblock %}
+{% block content %}
+<div class="form-box">
+  <h2>发布闲置</h2>
+  <form method="post">
+    <label>标题<input type="text" name="title" maxlength="100" required></label>
+    <label>分类
+      <select name="category_id">
+        {% for c in categories %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="form-row">
+      <label>价格(元)<input type="number" name="price" step="0.01" min="0.01" required></label>
+      <label>成色
+        <select name="condition_level">
+          <option>全新</option><option>99新</option><option selected>95新</option>
+          <option>9成新</option><option>8成新</option><option>7成新及以下</option>
+        </select>
+      </label>
+    </div>
+    <label>图片地址(URL，选填)<input type="text" name="image_url" placeholder="https://..."></label>
+    <label>商品描述<textarea name="description" rows="5" placeholder="描述一下宝贝的细节、入手渠道、瑕疵等"></textarea></label>
+    <button type="submit" class="btn-primary">立即发布</button>
+  </form>
+</div>
+{% endblock %}

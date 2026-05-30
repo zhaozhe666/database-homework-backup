@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ '我买到的' if role == 'buyer' else '我卖出的' }} · 二手集市{% endblock %}
+{% block content %}
+<h2 class="page-title">{{ '我买到的' if role == 'buyer' else '我卖出的' }}</h2>
+{% if orders %}
+<table class="list-table">
+  <tr>
+    <th>商品</th>
+    <th>{{ '卖家' if role == 'buyer' else '买家' }}</th>
+    <th>金额</th><th>状态</th><th>下单时间</th><th>操作</th>
+  </tr>
+  {% for o in orders %}
+  <tr>
+    <td><a href="{{ url_for('product_detail', pid=o.product_id) }}">{{ o.title }}</a></td>
+    <td>{{ o.seller_name if role == 'buyer' else o.buyer_name }}</td>
+    <td>¥{{ '%.2f'|format(o.amount) }}</td>
+    <td><span class="status status-{{ o.status }}">{{ ORDER_STATUS[o.status] }}</span></td>
+    <td>{{ o.created_at }}</td>
+    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">暂无订单</div>
+{% endif %}
+{% endblock %}

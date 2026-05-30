@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}我发布的 · 二手集市{% endblock %}
+{% block content %}
+<h2 class="page-title">我发布的商品</h2>
+{% if products %}
+<table class="list-table">
+  <tr><th>商品</th><th>分类</th><th>价格</th><th>状态</th><th>浏览</th><th>操作</th></tr>
+  {% for p in products %}
+  <tr>
+    <td><a href="{{ url_for('product_detail', pid=p.id) }}">{{ p.title }}</a></td>
+    <td>{{ p.category_name or '-' }}</td>
+    <td>¥{{ '%.2f'|format(p.price) }}</td>
+    <td><span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span></td>
+    <td>{{ p.view_count }}</td>
+    <td>
+      {% if p.status == 'on_sale' %}
+      <form action="{{ url_for('remove_product', pid=p.id) }}" method="post" style="display:inline">
+        <button class="btn-outline btn-xs">下架</button>
+      </form>
+      {% else %}-{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<div class="empty">还没有发布商品，<a href="{{ url_for('publish') }}">去发布</a></div>
+{% endif %}
+{% endblock %}
