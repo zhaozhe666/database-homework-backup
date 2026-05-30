@@ -42,9 +42,10 @@ PRODUCT_STATUS = {
     "sold": "已售出",
     "removed": "已下架",
 }
-USER_ROLES = {
-    "user": "普通用户",
-    "admin": "管理员",
+ADMIN_PERMISSIONS = {
+    "can_manage_products": "商品管理",
+    "can_manage_users": "用户管理",
+    "can_manage_admin_register": "管理员注册控制",
 }
 ORDER_STATUS = {
     "created": "待支付",
@@ -64,12 +65,27 @@ def current_user():
     uid = session.get("user_id")
     if not uid:
         return None
-    return query_one("SELECT * FROM users WHERE id=%s", (uid,))
+    user = query_one("SELECT * FROM users WHERE id=%s", (uid,))
+    if not user:
+        return None
+    admin = query_one("SELECT * FROM admins WHERE user_id=%s", (uid,))
+    user["admin"] = admin
+    user["is_admin"] = bool(admin)
+    return user
 
 
 def is_admin(user=None):
     user = user or current_user()
-    return bool(user and user.get("role") == "admin")
+    return bool(user and user.get("admin"))
+
+
+def has_admin_permission(permission, user=None):
+    user = user or current_user()
+    if not user or not user.get("admin"):
+        return False
+    if permission is None:
+        return True
+    return bool(user["admin"].get(permission))
 
 
 def get_setting(key, default=""):
@@ -82,6 +98,18 @@ def get_setting(key, default=""):
 
 def admin_registration_enabled():
     return get_setting("admin_registration_enabled", "0") == "1"
+
+
+def active_admin_count(permission=None):
+    where = "u.is_active=1"
+    if permission:
+        where += " AND a.%s=1" % permission
+    row = query_one(
+        "SELECT COUNT(*) AS c FROM admins a "
+        "JOIN users u ON a.user_id = u.id "
+        "WHERE %s" % where
+    )
+    return row["c"] if row else 0
 
 
 def notification_summary(user_id):
@@ -109,7 +137,7 @@ def inject_globals():
     return {
         "current_user": user,
         "notification_summary": notification_summary(user["id"]) if user else None,
-        "USER_ROLES": USER_ROLES,
+        "ADMIN_PERMISSIONS": ADMIN_PERMISSIONS,
         "admin_registration_enabled": admin_registration_enabled(),
         "PRODUCT_STATUS": PRODUCT_STATUS,
         "ORDER_STATUS": ORDER_STATUS,
@@ -133,14 +161,16 @@ def login_required(view):
     return wrapped
 
 
-def admin_required(view):
-    @functools.wraps(view)
-    @login_required
-    def wrapped(*args, **kwargs):
-        if not is_admin():
-            abort(403)
-        return view(*args, **kwargs)
-    return wrapped
+def admin_required(permission=None):
+    def decorator(view):
+        @functools.wraps(view)
+        @login_required
+        def wrapped(*args, **kwargs):
+            if not has_admin_permission(permission):
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
 
 
 def gen_order_no():
@@ -426,13 +456,33 @@ def ensure_runtime_schema():
         return
     with get_cursor(commit=True) as cur:
         add_column_if_missing(
-            cur, "users", "role",
-            "ENUM('user','admin') NOT NULL DEFAULT 'user' COMMENT '用户角色'",
-        )
-        add_column_if_missing(
             cur, "users", "is_active",
             "TINYINT(1) NOT NULL DEFAULT 1 COMMENT '账号是否启用'",
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admins (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              user_id INT UNSIGNED NOT NULL,
+              can_manage_products TINYINT(1) NOT NULL DEFAULT 1,
+              can_manage_users TINYINT(1) NOT NULL DEFAULT 1,
+              can_manage_admin_register TINYINT(1) NOT NULL DEFAULT 1,
+              created_by INT UNSIGNED DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              UNIQUE KEY uk_admin_user (user_id),
+              KEY idx_admin_created_by (created_by),
+              CONSTRAINT fk_admin_user
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              CONSTRAINT fk_admin_created_by
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        add_column_if_missing(cur, "admins", "can_manage_products", "TINYINT(1) NOT NULL DEFAULT 1")
+        add_column_if_missing(cur, "admins", "can_manage_users", "TINYINT(1) NOT NULL DEFAULT 1")
+        add_column_if_missing(cur, "admins", "can_manage_admin_register", "TINYINT(1) NOT NULL DEFAULT 1")
+        add_column_if_missing(cur, "admins", "created_by", "INT UNSIGNED DEFAULT NULL")
         add_column_if_missing(
             cur, "products", "removal_reason",
             "VARCHAR(255) DEFAULT NULL COMMENT '下架原因'",
@@ -460,7 +510,18 @@ def ensure_runtime_schema():
             "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (%s, %s)",
             ("admin_registration_enabled", "0"),
         )
-        cur.execute("UPDATE users SET role='admin', is_active=1 WHERE username='admin'")
+        cur.execute("UPDATE users SET is_active=1 WHERE username='admin'")
+        cur.execute(
+            "INSERT IGNORE INTO admins "
+            "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
+            "SELECT id, 1, 1, 1 FROM users WHERE username='admin'"
+        )
+        if column_exists(cur, "users", "role"):
+            cur.execute(
+                "INSERT IGNORE INTO admins "
+                "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
+                "SELECT id, 1, 1, 1 FROM users WHERE role='admin'"
+            )
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS product_images (
@@ -762,7 +823,7 @@ def logout():
 # 管理员后台
 # --------------------------------------------------------------------- #
 @app.route("/admin")
-@admin_required
+@admin_required()
 def admin_dashboard():
     stats = {
         "users": query_one("SELECT COUNT(*) AS c FROM users")["c"],
@@ -774,7 +835,7 @@ def admin_dashboard():
 
 
 @app.route("/admin/products")
-@admin_required
+@admin_required("can_manage_products")
 def admin_products():
     products = hydrate_product_images(query_all(
         "SELECT p.*, c.name AS category_name, u.nickname AS seller_name, "
@@ -789,7 +850,7 @@ def admin_products():
 
 
 @app.route("/admin/products/<int:pid>/remove", methods=["POST"])
-@admin_required
+@admin_required("can_manage_products")
 def admin_remove_product(pid):
     reason = request.form.get("reason", "").strip()
     if not reason:
@@ -817,7 +878,7 @@ def admin_remove_product(pid):
 
 
 @app.route("/admin/products/<int:pid>/restore", methods=["POST"])
-@admin_required
+@admin_required("can_manage_products")
 def admin_restore_product(pid):
     product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
     if not product:
@@ -837,46 +898,69 @@ def admin_restore_product(pid):
 
 
 @app.route("/admin/users")
-@admin_required
+@admin_required("can_manage_users")
 def admin_users():
     users = query_all(
-        "SELECT u.*, "
+        "SELECT u.*, a.id AS admin_id, "
+        "a.can_manage_products, a.can_manage_users, a.can_manage_admin_register, "
         "(SELECT COUNT(*) FROM products p WHERE p.seller_id=u.id) AS product_count, "
         "(SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id OR o.seller_id=u.id) AS order_count "
-        "FROM users u ORDER BY u.created_at DESC"
+        "FROM users u "
+        "LEFT JOIN admins a ON a.user_id = u.id "
+        "ORDER BY u.created_at DESC"
     )
-    admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
+    admin_count = active_admin_count()
     return render_template("admin_users.html", users=users, admin_count=admin_count)
 
 
-@app.route("/admin/users/<int:uid>/role", methods=["POST"])
-@admin_required
-def admin_update_user_role(uid):
-    role = request.form.get("role")
-    if role not in USER_ROLES:
-        flash("用户角色不正确", "danger")
-        return redirect(url_for("admin_users"))
-
+@app.route("/admin/users/<int:uid>/admin", methods=["POST"])
+@admin_required("can_manage_users")
+def admin_update_user_permissions(uid):
     user = query_one("SELECT * FROM users WHERE id=%s", (uid,))
     if not user:
         abort(404)
-    if uid == session["user_id"] and role != "admin":
-        flash("不能取消自己的管理员权限", "warning")
-        return redirect(url_for("admin_users"))
-    if user["role"] == "admin" and role != "admin":
-        admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
-        if admin_count <= 1:
+
+    make_admin = request.form.get("is_admin") == "1"
+    can_manage_products = 1 if request.form.get("can_manage_products") == "1" else 0
+    can_manage_users = 1 if request.form.get("can_manage_users") == "1" else 0
+    can_manage_admin_register = 1 if request.form.get("can_manage_admin_register") == "1" else 0
+    admin_row = query_one("SELECT * FROM admins WHERE user_id=%s", (uid,))
+
+    if admin_row and not make_admin:
+        if uid == session["user_id"]:
+            flash("不能取消自己的管理员身份", "warning")
+            return redirect(url_for("admin_users"))
+        if user.get("is_active", 1) and active_admin_count() <= 1:
             flash("至少要保留一个启用的管理员", "warning")
+            return redirect(url_for("admin_users"))
+    if admin_row and admin_row.get("can_manage_users") and not can_manage_users:
+        if uid == session["user_id"]:
+            flash("不能取消自己的用户管理权限", "warning")
+            return redirect(url_for("admin_users"))
+        if user.get("is_active", 1) and active_admin_count("can_manage_users") <= 1:
+            flash("至少要保留一个拥有用户管理权限的管理员", "warning")
             return redirect(url_for("admin_users"))
 
     with get_cursor(commit=True) as cur:
-        cur.execute("UPDATE users SET role=%s WHERE id=%s", (role, uid))
-    flash("用户权限已更新", "success")
+        if make_admin:
+            cur.execute(
+                "INSERT INTO admins "
+                "(user_id, can_manage_products, can_manage_users, can_manage_admin_register, created_by) "
+                "VALUES (%s, %s, %s, %s, %s) "
+                "ON DUPLICATE KEY UPDATE "
+                "can_manage_products=VALUES(can_manage_products), "
+                "can_manage_users=VALUES(can_manage_users), "
+                "can_manage_admin_register=VALUES(can_manage_admin_register)",
+                (uid, can_manage_products, can_manage_users, can_manage_admin_register, session["user_id"]),
+            )
+        else:
+            cur.execute("DELETE FROM admins WHERE user_id=%s", (uid,))
+    flash("管理员权限已更新", "success")
     return redirect(url_for("admin_users"))
 
 
 @app.route("/admin/users/<int:uid>/status", methods=["POST"])
-@admin_required
+@admin_required("can_manage_users")
 def admin_toggle_user_status(uid):
     user = query_one("SELECT * FROM users WHERE id=%s", (uid,))
     if not user:
@@ -884,10 +968,13 @@ def admin_toggle_user_status(uid):
     if uid == session["user_id"]:
         flash("不能停用自己的账号", "warning")
         return redirect(url_for("admin_users"))
-    if user["role"] == "admin" and user.get("is_active", 1):
-        admin_count = query_one("SELECT COUNT(*) AS c FROM users WHERE role='admin' AND is_active=1")["c"]
-        if admin_count <= 1:
+    if query_one("SELECT id FROM admins WHERE user_id=%s", (uid,)) and user.get("is_active", 1):
+        if active_admin_count() <= 1:
             flash("至少要保留一个启用的管理员", "warning")
+            return redirect(url_for("admin_users"))
+        admin_permissions = query_one("SELECT * FROM admins WHERE user_id=%s", (uid,))
+        if admin_permissions.get("can_manage_users") and active_admin_count("can_manage_users") <= 1:
+            flash("至少要保留一个拥有用户管理权限的管理员", "warning")
             return redirect(url_for("admin_users"))
 
     new_status = 0 if user.get("is_active", 1) else 1
@@ -898,7 +985,7 @@ def admin_toggle_user_status(uid):
 
 
 @app.route("/admin/settings", methods=["GET", "POST"])
-@admin_required
+@admin_required("can_manage_admin_register")
 def admin_settings():
     if request.method == "POST":
         enabled = "1" if request.form.get("admin_registration_enabled") == "1" else "0"
@@ -937,9 +1024,15 @@ def admin_register():
 
         with get_cursor(commit=True) as cur:
             cur.execute(
-                "INSERT INTO users (username, password_hash, nickname, phone, role) "
-                "VALUES (%s, %s, %s, %s, 'admin')",
+                "INSERT INTO users (username, password_hash, nickname, phone) "
+                "VALUES (%s, %s, %s, %s)",
                 (username, generate_password_hash(password), nickname, phone or None),
+            )
+            cur.execute(
+                "INSERT INTO admins "
+                "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
+                "VALUES (%s, 1, 1, 1)",
+                (cur.lastrowid,),
             )
         flash("管理员注册成功，请登录", "success")
         return redirect(url_for("login"))

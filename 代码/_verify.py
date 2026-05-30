@@ -30,7 +30,7 @@ tables = [r["TABLE_NAME"] for r in db.query_all(
     "SELECT TABLE_NAME FROM information_schema.tables "
     "WHERE TABLE_SCHEMA='secondhand'")]
 print("现有数据表:", sorted(tables))
-for table in ["product_images", "favorites", "reviews", "messages"]:
+for table in ["admins", "product_images", "favorites", "reviews", "messages"]:
     assert table in tables
 for column in ["refund_reason", "refund_requested_at", "refunded_at"]:
     assert db.query_one(
@@ -44,10 +44,16 @@ for column in ["sender_deleted", "receiver_deleted"]:
         "WHERE table_schema='secondhand' AND table_name='messages' AND column_name=%s",
         (column,),
     )["c"] == 1
-for column in ["role", "is_active"]:
+for column in ["is_active"]:
     assert db.query_one(
         "SELECT COUNT(*) c FROM information_schema.columns "
         "WHERE table_schema='secondhand' AND table_name='users' AND column_name=%s",
+        (column,),
+    )["c"] == 1
+for column in ["can_manage_products", "can_manage_users", "can_manage_admin_register"]:
+    assert db.query_one(
+        "SELECT COUNT(*) c FROM information_schema.columns "
+        "WHERE table_schema='secondhand' AND table_name='admins' AND column_name=%s",
         (column,),
     )["c"] == 1
 for column in ["removal_reason", "removed_by", "removed_at"]:
@@ -57,7 +63,9 @@ for column in ["removal_reason", "removed_by", "removed_at"]:
         (column,),
     )["c"] == 1
 assert "app_settings" in tables
-assert db.query_one("SELECT role FROM users WHERE username='admin'")["role"] == "admin"
+assert db.query_one(
+    "SELECT a.id FROM admins a JOIN users u ON a.user_id=u.id WHERE u.username='admin'"
+)
 original_admin_registration_setting = db.query_one(
     "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",
 )["setting_value"]
@@ -80,9 +88,16 @@ print("注册卖家:", post("/register", **seller).status_code)
 print("注册买家:", post("/register", **buyer).status_code)
 print("注册同学:", post("/register", **buyer2).status_code)
 db.execute(
-    "INSERT INTO users (username, password_hash, nickname, phone, role) "
-    "VALUES (%s, %s, %s, %s, 'admin')",
+    "INSERT INTO users (username, password_hash, nickname, phone) "
+    "VALUES (%s, %s, %s, %s)",
     (admin["username"], generate_password_hash(admin["password"]), admin["nickname"], admin["phone"]),
+)
+admin_id = db.query_one("SELECT id FROM users WHERE username=%s", (admin["username"],))["id"]
+db.execute(
+    "INSERT INTO admins "
+    "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
+    "VALUES (%s, 1, 1, 1)",
+    (admin_id,),
 )
 print("临时管理员创建完成")
 
@@ -123,10 +138,17 @@ assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"]
 print("管理员恢复商品 OK")
 print("后台用户页状态码 =", client.get("/admin/users").status_code)
 seller_id_for_admin = db.query_one("SELECT id FROM users WHERE username=%s", (seller["username"],))["id"]
-post(f"/admin/users/{seller_id_for_admin}/role", role="admin")
-assert db.query_one("SELECT role FROM users WHERE id=%s", (seller_id_for_admin,))["role"] == "admin"
-post(f"/admin/users/{seller_id_for_admin}/role", role="user")
-assert db.query_one("SELECT role FROM users WHERE id=%s", (seller_id_for_admin,))["role"] == "user"
+post(
+    f"/admin/users/{seller_id_for_admin}/admin",
+    is_admin="1",
+    can_manage_products="1",
+    can_manage_users="0",
+    can_manage_admin_register="0",
+)
+seller_admin = db.query_one("SELECT * FROM admins WHERE user_id=%s", (seller_id_for_admin,))
+assert seller_admin and seller_admin["can_manage_products"] == 1 and seller_admin["can_manage_users"] == 0
+post(f"/admin/users/{seller_id_for_admin}/admin")
+assert not db.query_one("SELECT id FROM admins WHERE user_id=%s", (seller_id_for_admin,))
 post("/admin/settings", admin_registration_enabled="1")
 assert db.query_one(
     "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",

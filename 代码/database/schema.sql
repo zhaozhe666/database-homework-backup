@@ -17,12 +17,29 @@ CREATE TABLE users (
   nickname      VARCHAR(50)  NOT NULL COMMENT '昵称',
   phone         VARCHAR(20)  DEFAULT NULL COMMENT '联系电话',
   balance       DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '钱包余额',
-  role          ENUM('user','admin') NOT NULL DEFAULT 'user' COMMENT '用户角色',
   is_active     TINYINT(1) NOT NULL DEFAULT 1 COMMENT '账号是否启用',
   created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户';
+
+-- ---------------------------------------------------------------------
+-- 管理员表：管理员是用户的一种扩展身份，并带独立后台权限。
+-- ---------------------------------------------------------------------
+CREATE TABLE admins (
+  id                         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id                    INT UNSIGNED NOT NULL COMMENT '对应用户',
+  can_manage_products        TINYINT(1) NOT NULL DEFAULT 1 COMMENT '商品管理权限',
+  can_manage_users           TINYINT(1) NOT NULL DEFAULT 1 COMMENT '用户管理权限',
+  can_manage_admin_register  TINYINT(1) NOT NULL DEFAULT 1 COMMENT '管理员注册控制权限',
+  created_by                 INT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  created_at                 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_admin_user (user_id),
+  KEY idx_admin_created_by (created_by),
+  CONSTRAINT fk_admin_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_admin_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员';
 
 -- ---------------------------------------------------------------------
 -- 商品分类表

@@ -4,20 +4,20 @@
 <div class="admin-head">
   <h2 class="page-title">后台管理</h2>
   <div class="admin-tabs">
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>
+    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
+    {% if current_user.admin.can_manage_users %}<a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>{% endif %}
+    {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
   </div>
 </div>
 
 <div class="me-grid">
-  <a class="me-card" href="{{ url_for('admin_users') }}">
+  <a class="me-card" href="{{ url_for('admin_users') if current_user.admin.can_manage_users else url_for('admin_dashboard') }}">
     <div class="num">{{ stats.users }}</div><div>用户</div>
   </a>
-  <a class="me-card" href="{{ url_for('admin_products') }}">
+  <a class="me-card" href="{{ url_for('admin_products') if current_user.admin.can_manage_products else url_for('admin_dashboard') }}">
     <div class="num">{{ stats.products }}</div><div>商品</div>
   </a>
-  <a class="me-card" href="{{ url_for('admin_products') }}">
+  <a class="me-card" href="{{ url_for('admin_products') if current_user.admin.can_manage_products else url_for('admin_dashboard') }}">
     <div class="num">{{ stats.removed_products }}</div><div>已下架</div>
   </a>
   <div class="me-card">

@@ -5,8 +5,8 @@
   <h2 class="page-title">系统设置</h2>
   <div class="admin-tabs">
     <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>
+    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
+    {% if current_user.admin.can_manage_users %}<a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>{% endif %}
   </div>
 </div>
 

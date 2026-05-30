@@ -5,14 +5,14 @@
   <h2 class="page-title">用户管理</h2>
   <div class="admin-tabs">
     <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>
+    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
+    {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
   </div>
 </div>
 
 <table class="list-table admin-table">
   <tr>
-    <th>用户</th><th>角色</th><th>状态</th><th>余额</th><th>商品/订单</th><th>注册时间</th><th>操作</th>
+    <th>用户</th><th>身份</th><th>状态</th><th>余额</th><th>商品/订单</th><th>注册时间</th><th>权限</th><th>操作</th>
   </tr>
   {% for u in users %}
   <tr>
@@ -20,7 +20,7 @@
       <b>{{ u.nickname }}</b>
       <div class="muted">{{ u.username }} · {{ u.phone or '未填手机' }}</div>
     </td>
-    <td>{{ USER_ROLES[u.role] if u.role in USER_ROLES else u.role }}</td>
+    <td>{{ '管理员' if u.admin_id else '普通用户' }}</td>
     <td>
       {% if u.is_active %}
         <span class="status status-prod-on_sale">启用</span>
@@ -32,14 +32,16 @@
     <td>{{ u.product_count }} / {{ u.order_count }}</td>
     <td>{{ u.created_at }}</td>
     <td>
+      <form action="{{ url_for('admin_update_user_permissions', uid=u.id) }}" method="post" class="admin-permission-form">
+        <label><input type="checkbox" name="is_admin" value="1" {% if u.admin_id %}checked{% endif %}> 管理员</label>
+        <label><input type="checkbox" name="can_manage_products" value="1" {% if u.can_manage_products %}checked{% endif %}> 商品</label>
+        <label><input type="checkbox" name="can_manage_users" value="1" {% if u.can_manage_users %}checked{% endif %}> 用户</label>
+        <label><input type="checkbox" name="can_manage_admin_register" value="1" {% if u.can_manage_admin_register %}checked{% endif %}> 注册</label>
+        <button class="btn-outline btn-xs" type="submit">保存</button>
+      </form>
+    </td>
+    <td>
       <div class="admin-actions">
-        <form action="{{ url_for('admin_update_user_role', uid=u.id) }}" method="post" class="admin-inline-form">
-          <select name="role">
-            <option value="user" {% if u.role == 'user' %}selected{% endif %}>普通用户</option>
-            <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>管理员</option>
-          </select>
-          <button class="btn-outline btn-xs" type="submit">保存权限</button>
-        </form>
         {% if u.id != current_user.id %}
           <form action="{{ url_for('admin_toggle_user_status', uid=u.id) }}" method="post">
             <button class="btn-outline btn-xs {% if u.is_active %}btn-danger{% else %}btn-success{% endif %}" type="submit">
