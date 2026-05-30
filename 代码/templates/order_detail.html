@@ -10,7 +10,8 @@
 
   <div class="order-item">
     <div class="order-thumb">
-      {% if order.image_url %}<img src="{{ order.image_url }}" alt="">{% else %}<div class="no-img">无图</div>{% endif %}
+      {% set order_cover = cover_image(order.image_url) %}
+      {% if order_cover %}<img src="{{ order_cover }}" alt="">{% else %}<div class="no-img">无图</div>{% endif %}
     </div>
     <div class="order-item-info">
       <a class="order-title" href="{{ url_for('product_detail', pid=order.product_id) }}">{{ order.title }}</a>

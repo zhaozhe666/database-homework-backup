@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}编辑商品 · 二手集市{% endblock %}
+{% block content %}
+{% set existing_images = image_urls(product.image_url) %}
+<div class="form-box">
+  <h2>编辑商品</h2>
+  <form method="post" enctype="multipart/form-data">
+    <label>标题<input type="text" name="title" maxlength="100" value="{{ product.title }}" required></label>
+    <label>分类
+      <select name="category_id">
+        {% for c in categories %}
+          <option value="{{ c.id }}" {% if c.id == product.category_id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="form-row">
+      <label>价格(元)<input type="number" name="price" step="1" min="1" value="{{ '%.0f'|format(product.price) }}" required></label>
+      <label>成色
+        <select name="condition_level">
+          {% for cond in ['全新','99新','95新','9成新','8成新','7成新及以下'] %}
+            <option {% if cond == product.condition_level %}selected{% endif %}>{{ cond }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    {% if existing_images %}
+      <div class="existing-images">
+        {% for image in existing_images %}
+          <span class="existing-image-item" data-image="{{ image }}">
+            <img src="{{ image }}" alt="">
+            <input type="hidden" name="kept_images" value="{{ image }}">
+            <button type="button" class="upload-remove existing-image-remove" aria-label="删除这张图片">×</button>
+          </span>
+        {% endfor %}
+      </div>
+      <p class="auth-tip">可以删除旧图，也可以继续添加新图，总数最多 4 张。</p>
+    {% else %}
+      <p class="auth-tip">还没有商品图片，可以添加新图，总数最多 4 张。</p>
+    {% endif %}
+
+    <div class="image-field">
+      <label class="upload-card" for="image_files">
+        <input id="image_files" type="file" name="image_files" accept="image/*" multiple>
+        <span class="upload-preview-grid" aria-hidden="true"></span>
+        <span class="upload-mark">+</span>
+        <span class="upload-text">添加新图片，最多 4 张</span>
+      </label>
+      <div class="upload-file-name" aria-live="polite">未选择新图片</div>
+    </div>
+
+    <label>商品描述<textarea name="description" rows="5" placeholder="描述一下宝贝的细节、入手渠道、瑕疵等">{{ product.description or '' }}</textarea></label>
+    <button type="submit" class="btn-primary">保存修改</button>
+    <a class="btn-outline" href="{{ url_for('my_selling') }}">返回</a>
+  </form>
+</div>
+<script>
+  const imageInput = document.getElementById("image_files");
+  const uploadCard = document.querySelector(".upload-card");
+  const uploadPreviewGrid = document.querySelector(".upload-preview-grid");
+  const uploadFileName = document.querySelector(".upload-file-name");
+  const existingImages = document.querySelector(".existing-images");
+  const maxImages = 4;
+  const selectedImages = new DataTransfer();
+  let previewUrls = [];
+
+  function existingImageCount() {
+    return document.querySelectorAll("input[name='kept_images']").length;
+  }
+
+  function remainingImageSlots() {
+    return maxImages - existingImageCount() - selectedImages.files.length;
+  }
+
+  function updateUploadText() {
+    const files = Array.from(selectedImages.files);
+    const total = existingImageCount() + files.length;
+
+    if (!files.length) {
+      uploadFileName.textContent = total
+        ? "当前共 " + total + " 张图片，可继续添加"
+        : "未选择新图片";
+      return;
+    }
+
+    uploadFileName.textContent = "新加 " + files.length + " 张，当前共 " + total + " 张";
+  }
+
+  function clearPreviewUrls() {
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
+  }
+
+  function syncInputFiles() {
+    imageInput.files = selectedImages.files;
+  }
+
+  function renderPreviews() {
+    const files = Array.from(selectedImages.files);
+    clearPreviewUrls();
+    uploadPreviewGrid.innerHTML = "";
+
+    if (!files.length) {
+      uploadCard.classList.remove("has-file");
+      updateUploadText();
+      return;
+    }
+
+    files.forEach((file, index) => {
+      const url = URL.createObjectURL(file);
+      previewUrls.push(url);
+      const item = document.createElement("span");
+      item.className = "upload-preview-item";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "upload-remove";
+      removeButton.textContent = "×";
+      removeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const remaining = Array.from(selectedImages.files).filter((_, i) => i !== index);
+        selectedImages.items.clear();
+        remaining.forEach((itemFile) => selectedImages.items.add(itemFile));
+        syncInputFiles();
+        renderPreviews();
+      });
+      item.appendChild(img);
+      item.appendChild(removeButton);
+      uploadPreviewGrid.appendChild(item);
+    });
+
+    uploadCard.classList.add("has-file");
+    updateUploadText();
+  }
+
+  imageInput.addEventListener("change", () => {
+    const incoming = Array.from(imageInput.files || []);
+    const remainingSlots = remainingImageSlots();
+
+    incoming.slice(0, remainingSlots).forEach((file) => selectedImages.items.add(file));
+    syncInputFiles();
+    renderPreviews();
+
+    if (incoming.length > remainingSlots) {
+      uploadFileName.textContent = "最多 4 张，请先删除旧图或新图";
+    }
+  });
+
+  if (existingImages) {
+    existingImages.addEventListener("click", (event) => {
+      const removeButton = event.target.closest(".existing-image-remove");
+      if (!removeButton) return;
+      const item = removeButton.closest(".existing-image-item");
+      item.remove();
+      updateUploadText();
+    });
+  }
+
+  updateUploadText();
+</script>
+{% endblock %}

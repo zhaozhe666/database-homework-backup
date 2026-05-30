@@ -7,20 +7,31 @@
 """
 
 import functools
+import os
 import random
+import uuid
 from datetime import datetime
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
     session, flash, abort,
 )
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 from config import SECRET_KEY
 from db import query_all, query_one, get_cursor
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
+MAX_UPLOAD_MB = 20
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+
+UPLOAD_FOLDER = os.path.join(app.static_folder, "uploads")
+ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+MAX_PRODUCT_IMAGES = 4
+IMAGE_URL_SEPARATOR = "|"
 
 # 状态中文映射，供模板显示
 PRODUCT_STATUS = {
@@ -55,6 +66,8 @@ def inject_globals():
         "current_user": current_user(),
         "PRODUCT_STATUS": PRODUCT_STATUS,
         "ORDER_STATUS": ORDER_STATUS,
+        "image_urls": image_urls,
+        "cover_image": cover_image,
     }
 
 
@@ -71,6 +84,77 @@ def login_required(view):
 def gen_order_no():
     """生成订单号：时间戳 + 4 位随机数。"""
     return datetime.now().strftime("%Y%m%d%H%M%S") + "%04d" % random.randint(0, 9999)
+
+
+def image_urls(value):
+    """把数据库里的图片字段转成列表，兼容旧的单图 URL。"""
+    if not value:
+        return []
+    return [url for url in str(value).split(IMAGE_URL_SEPARATOR) if url]
+
+
+def cover_image(value):
+    urls = image_urls(value)
+    return urls[0] if urls else ""
+
+
+def save_uploaded_images(file_storages):
+    """保存上传的商品图片，返回可直接存入数据库的静态资源路径列表。"""
+    files = [file for file in file_storages if file and file.filename]
+    if not files:
+        return []
+    if len(files) > MAX_PRODUCT_IMAGES:
+        raise ValueError("最多上传 %d 张图片" % MAX_PRODUCT_IMAGES)
+
+    prepared = []
+    for file_storage in files:
+        filename = secure_filename(file_storage.filename)
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise ValueError("图片格式仅支持 JPG、PNG、GIF、WEBP")
+        prepared.append((file_storage, ext))
+
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    urls = []
+    for file_storage, ext in prepared:
+        stored_name = "%s.%s" % (uuid.uuid4().hex, ext)
+        file_storage.save(os.path.join(UPLOAD_FOLDER, stored_name))
+        urls.append(url_for("static", filename="uploads/" + stored_name))
+    return urls
+
+
+def save_uploaded_image(file_storage):
+    """保存单张上传图片，保留给测试和旧调用使用。"""
+    urls = save_uploaded_images([file_storage])
+    return urls[0] if urls else None
+
+
+def read_product_form():
+    return {
+        "title": request.form.get("title", "").strip(),
+        "description": request.form.get("description", "").strip(),
+        "price": request.form.get("price", type=float),
+        "category_id": request.form.get("category_id", type=int),
+        "condition_level": request.form.get("condition_level", "9成新").strip(),
+    }
+
+
+def read_image_files():
+    image_files = request.files.getlist("image_files")
+    if not image_files:
+        image_files = [request.files.get("image_file")]
+    return image_files
+
+
+def read_kept_image_urls():
+    """读取编辑页保留的旧图路径，只允许保留当前商品已有图片。"""
+    return [url for url in request.form.getlist("kept_images") if url]
+
+
+def validate_product_form(form):
+    if not form["title"] or form["price"] is None or form["price"] <= 0:
+        return "标题必填，价格须大于 0"
+    return None
 
 
 # --------------------------------------------------------------------- #
@@ -183,15 +267,19 @@ def logout():
 def publish():
     categories = query_all("SELECT * FROM categories ORDER BY id")
     if request.method == "POST":
-        title = request.form.get("title", "").strip()
-        description = request.form.get("description", "").strip()
-        price = request.form.get("price", type=float)
-        category_id = request.form.get("category_id", type=int)
-        condition_level = request.form.get("condition_level", "9成新").strip()
+        form = read_product_form()
         image_url = request.form.get("image_url", "").strip()
+        image_files = read_image_files()
 
-        if not title or price is None or price <= 0:
-            flash("标题必填，价格须大于 0", "danger")
+        error = validate_product_form(form)
+        if error:
+            flash(error, "danger")
+            return render_template("publish.html", categories=categories)
+
+        try:
+            uploaded_image_urls = save_uploaded_images(image_files)
+        except ValueError as exc:
+            flash(str(exc), "danger")
             return render_template("publish.html", categories=categories)
 
         with get_cursor(commit=True) as cur:
@@ -199,12 +287,62 @@ def publish():
                 "INSERT INTO products "
                 "(seller_id, category_id, title, description, price, condition_level, image_url) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (session["user_id"], category_id, title, description, price,
-                 condition_level, image_url or None),
+                (session["user_id"], form["category_id"], form["title"], form["description"],
+                 form["price"], form["condition_level"],
+                 IMAGE_URL_SEPARATOR.join(uploaded_image_urls) or image_url or None),
             )
         flash("商品发布成功", "success")
         return redirect(url_for("my_selling"))
     return render_template("publish.html", categories=categories)
+
+
+@app.route("/product/<int:pid>/edit", methods=["GET", "POST"])
+@login_required
+def edit_product(pid):
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product or product["seller_id"] != session["user_id"]:
+        abort(403)
+    if product["status"] != "on_sale":
+        flash("只有在售商品可以编辑", "warning")
+        return redirect(url_for("my_selling"))
+
+    categories = query_all("SELECT * FROM categories ORDER BY id")
+    if request.method == "POST":
+        form = read_product_form()
+        image_files = read_image_files()
+
+        error = validate_product_form(form)
+        if error:
+            flash(error, "danger")
+            return render_template("edit_product.html", product=product, categories=categories)
+
+        try:
+            existing_images = image_urls(product["image_url"])
+            kept_images = [
+                url for url in read_kept_image_urls()
+                if url in existing_images
+            ]
+            new_image_count = len([file for file in image_files if file and file.filename])
+            if len(kept_images) + new_image_count > MAX_PRODUCT_IMAGES:
+                raise ValueError("商品图片最多保留 %d 张，请先删除多余图片" % MAX_PRODUCT_IMAGES)
+            uploaded_image_urls = save_uploaded_images(image_files)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return render_template("edit_product.html", product=product, categories=categories)
+
+        merged_images = kept_images + uploaded_image_urls
+        image_url = IMAGE_URL_SEPARATOR.join(merged_images) or None
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE products SET category_id=%s, title=%s, description=%s, "
+                "price=%s, condition_level=%s, image_url=%s WHERE id=%s",
+                (form["category_id"], form["title"], form["description"],
+                 form["price"], form["condition_level"], image_url, pid),
+            )
+        flash("商品信息已更新", "success")
+        return redirect(url_for("my_selling"))
+
+    return render_template("edit_product.html", product=product, categories=categories)
 
 
 @app.route("/product/<int:pid>/remove", methods=["POST"])
@@ -219,6 +357,45 @@ def remove_product(pid):
     with get_cursor(commit=True) as cur:
         cur.execute("UPDATE products SET status='removed' WHERE id=%s", (pid,))
     flash("商品已下架", "info")
+    return redirect(url_for("my_selling"))
+
+
+@app.route("/product/<int:pid>/restore", methods=["POST"])
+@login_required
+def restore_product(pid):
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product or product["seller_id"] != session["user_id"]:
+        abort(403)
+    if product["status"] != "removed":
+        flash("只有已下架商品可以重新上架", "warning")
+        return redirect(url_for("my_selling"))
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE products SET status='on_sale' WHERE id=%s", (pid,))
+    flash("商品已重新上架", "success")
+    return redirect(url_for("my_selling"))
+
+
+@app.route("/product/<int:pid>/delete", methods=["POST"])
+@login_required
+def delete_product(pid):
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product or product["seller_id"] != session["user_id"]:
+        abort(403)
+    if product["status"] == "locked":
+        flash("交易中的商品不能删除", "warning")
+        return redirect(url_for("my_selling"))
+
+    order_count = query_one(
+        "SELECT COUNT(*) AS c FROM orders WHERE product_id=%s",
+        (pid,),
+    )["c"]
+    if order_count:
+        flash("已有订单记录，不能删除；可以下架保留交易记录", "warning")
+        return redirect(url_for("my_selling"))
+
+    with get_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM products WHERE id=%s", (pid,))
+    flash("商品已删除", "info")
     return redirect(url_for("my_selling"))
 
 
@@ -406,11 +583,62 @@ def me():
         "me.html", selling_cnt=selling_cnt, bought_cnt=bought_cnt, sold_cnt=sold_cnt)
 
 
+@app.route("/me/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    user = current_user()
+    if request.method == "POST":
+        nickname = request.form.get("nickname", "").strip()
+        phone = request.form.get("phone", "").strip()
+        old_password = request.form.get("old_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+        changing_password = bool(old_password or new_password or confirm_password)
+
+        if not nickname:
+            flash("昵称不能为空", "danger")
+            return render_template("profile.html", user=user)
+
+        password_hash = None
+        if changing_password:
+            if not old_password or not new_password or not confirm_password:
+                flash("修改密码时请完整填写旧密码、新密码和确认密码", "danger")
+                return render_template("profile.html", user=user)
+            if not check_password_hash(user["password_hash"], old_password):
+                flash("旧密码不正确", "danger")
+                return render_template("profile.html", user=user)
+            if len(new_password) < 6:
+                flash("新密码至少 6 位", "danger")
+                return render_template("profile.html", user=user)
+            if new_password != confirm_password:
+                flash("两次输入的新密码不一致", "danger")
+                return render_template("profile.html", user=user)
+            password_hash = generate_password_hash(new_password)
+
+        with get_cursor(commit=True) as cur:
+            if password_hash:
+                cur.execute(
+                    "UPDATE users SET nickname=%s, phone=%s, password_hash=%s WHERE id=%s",
+                    (nickname, phone or None, password_hash, session["user_id"]),
+                )
+            else:
+                cur.execute(
+                    "UPDATE users SET nickname=%s, phone=%s WHERE id=%s",
+                    (nickname, phone or None, session["user_id"]),
+                )
+        flash("账号资料已保存", "success")
+        return redirect(url_for("profile"))
+
+    return render_template("profile.html", user=user)
+
+
 @app.route("/me/selling")
 @login_required
 def my_selling():
     products = query_all(
-        "SELECT p.*, c.name AS category_name FROM products p "
+        "SELECT p.*, c.name AS category_name, "
+        "(SELECT COUNT(*) FROM orders o WHERE o.product_id = p.id) AS order_count "
+        "FROM products p "
         "LEFT JOIN categories c ON p.category_id = c.id "
         "WHERE p.seller_id=%s ORDER BY p.created_at DESC",
         (session["user_id"],),
@@ -471,6 +699,14 @@ def forbidden(e):
 @app.errorhandler(404)
 def not_found(e):
     return render_template("error.html", code=404, message="页面不存在"), 404
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def file_too_large(e):
+    return render_template(
+        "error.html", code=413,
+        message="上传图片总大小不能超过 %dMB" % MAX_UPLOAD_MB,
+    ), 413
 
 
 if __name__ == "__main__":

@@ -17,8 +17,9 @@
   {% for p in products %}
   <a class="card" href="{{ url_for('product_detail', pid=p.id) }}">
     <div class="card-img">
-      {% if p.image_url %}
-        <img src="{{ p.image_url }}" alt="{{ p.title }}">
+      {% set cover = cover_image(p.image_url) %}
+      {% if cover %}
+        <img src="{{ cover }}" alt="{{ p.title }}">
       {% else %}
         <div class="no-img">暂无图片</div>
       {% endif %}

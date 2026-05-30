@@ -10,15 +10,20 @@
       <tbody>
         {% for p in products %}
           <tr>
-            <td><a href="{{ url_for('product_detail', product_id=p.product_id) }}">{{ p.title }}</a></td>
+            <td><a href="{{ url_for('product_detail', pid=p.id) }}">{{ p.title }}</a></td>
             <td>{{ p.category_name }}</td>
             <td>¥{{ '%.2f'|format(p.price) }}</td>
-            <td><span class="badge {{ p.status }}">{{ {'on_sale':'在售','reserved':'已预订','sold':'已售出','removed':'已下架','draft':'草稿'}[p.status] }}</span></td>
+            <td><span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span></td>
             <td>{{ p.view_count }}</td>
             <td class="row-actions">
-              {% if p.status in ['on_sale','draft'] %}
-                <form method="post" action="{{ url_for('remove_product', product_id=p.product_id) }}">
-                  <button class="btn btn-sm btn-muted" type="submit">下架</button>
+              {% if p.status == 'on_sale' %}
+                <a class="btn-outline btn-xs" href="{{ url_for('edit_product', pid=p.id) }}">编辑</a>
+                <form method="post" action="{{ url_for('remove_product', pid=p.id) }}">
+                  <button class="btn-outline btn-xs" type="submit">下架</button>
+                </form>
+              {% elif p.status == 'removed' %}
+                <form method="post" action="{{ url_for('restore_product', pid=p.id) }}">
+                  <button class="btn-outline btn-success btn-xs" type="submit">重新上架</button>
                 </form>
               {% else %}
                 <span class="muted">—</span>

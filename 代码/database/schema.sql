@@ -45,7 +45,7 @@ CREATE TABLE products (
   description     TEXT COMMENT '描述',
   price           DECIMAL(10,2) NOT NULL COMMENT '售价',
   condition_level VARCHAR(20)  NOT NULL DEFAULT '9成新' COMMENT '新旧程度',
-  image_url       VARCHAR(255) DEFAULT NULL COMMENT '图片地址',
+  image_url       TEXT DEFAULT NULL COMMENT '图片地址，支持多图时用 | 分隔',
   status          ENUM('on_sale','locked','sold','removed') NOT NULL DEFAULT 'on_sale',
   view_count      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '浏览量',
   created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -109,4 +109,5 @@ INSERT INTO categories (name) VALUES
 ('服饰鞋包'),
 ('运动户外'),
 ('生活家居'),
-('美妆个护');
+('美妆个护'),
+('其他');

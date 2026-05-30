@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ product.title }} · 二手集市{% endblock %}
 {% block content %}
+{% set images = image_urls(product.image_url) %}
 <div class="detail">
   <div class="detail-img">
-    {% if product.image_url %}
-      <img src="{{ product.image_url }}" alt="{{ product.title }}">
+    {% if images %}
+      <img class="detail-main-img" src="{{ images[0] }}" alt="{{ product.title }}">
+      {% if images|length > 1 %}
+        <div class="detail-thumbs">
+          {% for image in images %}
+            <button type="button" class="detail-thumb {% if loop.first %}active{% endif %}" data-image="{{ image }}">
+              <img src="{{ image }}" alt="">
+            </button>
+          {% endfor %}
+        </div>
+      {% endif %}
     {% else %}
       <div class="no-img big">暂无图片</div>
     {% endif %}
@@ -38,4 +48,18 @@
     {% endif %}
   </div>
 </div>
+{% if images|length > 1 %}
+<script>
+  const mainImage = document.querySelector(".detail-main-img");
+  const thumbButtons = document.querySelectorAll(".detail-thumb");
+
+  thumbButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      mainImage.src = button.dataset.image;
+      thumbButtons.forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+    });
+  });
+</script>
+{% endif %}
 {% endblock %}
