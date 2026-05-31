@@ -5,6 +5,7 @@
 <div class="form-box">
   <h2>编辑商品</h2>
   <form method="post" enctype="multipart/form-data">
+    {{ csrf_field() }}
     <label>标题<input type="text" name="title" maxlength="100" value="{{ product.title }}" required></label>
     <label>分类
       <select name="category_id">

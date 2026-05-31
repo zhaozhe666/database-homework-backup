@@ -4,6 +4,7 @@
 <div class="form-box">
   <h2>发布闲置</h2>
   <form method="post" enctype="multipart/form-data">
+    {{ csrf_field() }}
     <label>标题<input type="text" name="title" maxlength="100" required></label>
     <label>分类
       <select name="category_id">

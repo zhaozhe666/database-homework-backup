@@ -19,10 +19,12 @@
               {% if p.status == 'on_sale' %}
                 <a class="btn-outline btn-xs" href="{{ url_for('edit_product', pid=p.id) }}">编辑</a>
                 <form method="post" action="{{ url_for('remove_product', pid=p.id) }}">
+                  {{ csrf_field() }}
                   <button class="btn-outline btn-xs" type="submit">下架</button>
                 </form>
               {% elif p.status == 'removed' %}
                 <form method="post" action="{{ url_for('restore_product', pid=p.id) }}">
+                  {{ csrf_field() }}
                   <button class="btn-outline btn-success btn-xs" type="submit">重新上架</button>
                 </form>
               {% else %}

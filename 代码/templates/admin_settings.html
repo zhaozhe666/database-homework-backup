@@ -12,6 +12,7 @@
 </div>
 
 <form method="post" class="form-box">
+  {{ csrf_field() }}
   <label class="check-row">
     <input type="checkbox" name="admin_registration_enabled" value="1" {% if admin_registration_enabled %}checked{% endif %}>
     <span>开放管理员注册入口</span>

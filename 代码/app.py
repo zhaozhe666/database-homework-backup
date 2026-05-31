@@ -13,6 +13,7 @@
 import functools
 import os
 import random
+import secrets
 import uuid
 from datetime import datetime, timedelta
 
@@ -20,9 +21,9 @@ from flask import (
     Flask, render_template, request, redirect, url_for,
     session, flash, abort,
 )
+from markupsafe import Markup, escape
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
 
 from config import SECRET_KEY
 from db import query_all, query_one, get_cursor
@@ -38,6 +39,8 @@ MAX_PRODUCT_IMAGES = 4
 IMAGE_URL_SEPARATOR = "|"
 RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
+CSRF_SESSION_KEY = "_csrf_token"
+CSRF_FIELD_NAME = "_csrf_token"
 
 # 状态中文映射，供模板显示
 PRODUCT_STATUS = {
@@ -134,6 +137,33 @@ def notification_summary(user_id):
     }
 
 
+def csrf_token():
+    """返回当前会话的 CSRF token，没有则生成。"""
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def csrf_field():
+    """生成 POST 表单需要的隐藏 CSRF 字段。"""
+    return Markup(
+        '<input type="hidden" name="%s" value="%s">'
+        % (CSRF_FIELD_NAME, escape(csrf_token()))
+    )
+
+
+def validate_csrf_token():
+    """校验会修改状态的请求，防止第三方页面伪造表单提交。"""
+    if request.method != "POST":
+        return
+    expected = session.get(CSRF_SESSION_KEY)
+    submitted = request.form.get(CSRF_FIELD_NAME) or request.headers.get("X-CSRF-Token")
+    if not expected or not submitted or not secrets.compare_digest(str(expected), str(submitted)):
+        abort(400)
+
+
 @app.context_processor
 def inject_globals():
     """模板全局变量。"""
@@ -147,6 +177,8 @@ def inject_globals():
         "ORDER_STATUS": ORDER_STATUS,
         "image_urls": image_urls,
         "cover_image": cover_image,
+        "csrf_token": csrf_token,
+        "csrf_field": csrf_field,
     }
 
 
@@ -206,8 +238,8 @@ def save_uploaded_images(file_storages):
 
     prepared = []
     for file_storage in files:
-        filename = secure_filename(file_storage.filename)
-        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        original_filename = file_storage.filename or ""
+        ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
         if ext not in ALLOWED_IMAGE_EXTENSIONS:
             raise ValueError("图片格式仅支持 JPG、PNG、GIF、WEBP")
         prepared.append((file_storage, ext))
@@ -636,6 +668,7 @@ def ensure_runtime_schema():
 
 @app.before_request
 def prepare_runtime_schema():
+    validate_csrf_token()
     ensure_runtime_schema()
     cancel_expired_unpaid_orders()
 
@@ -1489,7 +1522,7 @@ def complete_order(oid):
                 return redirect(url_for("index"))
             if order["buyer_id"] != buyer_id:
                 abort(403)
-            if order["status"] != "paid":
+            if order["status"] not in ("paid", "refund_requested"):
                 flash("订单状态不支持确认收货", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
@@ -1500,7 +1533,9 @@ def complete_order(oid):
             )
             cur.execute("UPDATE products SET status='sold' WHERE id=%s", (order["product_id"],))
             cur.execute(
-                "UPDATE orders SET status='completed', completed_at=NOW() WHERE id=%s", (oid,)
+                "UPDATE orders SET status='completed', completed_at=NOW(), "
+                "refund_reason=NULL, refund_requested_at=NULL WHERE id=%s",
+                (oid,),
             )
         flash("确认收货成功，交易完成", "success")
     except Exception:
@@ -1565,6 +1600,62 @@ def approve_refund(oid):
         flash("退款已同意，金额已退回买家余额", "success")
     except Exception:
         flash("退款处理失败，请重试", "danger")
+    return redirect(url_for("order_detail", oid=oid))
+
+
+@app.route("/order/<int:oid>/refund/reject", methods=["POST"])
+@login_required
+def reject_refund(oid):
+    seller_id = session["user_id"]
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
+            order = cur.fetchone()
+            if not order:
+                flash("订单不存在", "danger")
+                return redirect(url_for("index"))
+            if order["seller_id"] != seller_id:
+                abort(403)
+            if order["status"] != "refund_requested":
+                flash("当前订单没有待处理的退款申请", "warning")
+                return redirect(url_for("order_detail", oid=oid))
+
+            cur.execute(
+                "UPDATE orders SET status='paid', refund_reason=NULL, "
+                "refund_requested_at=NULL WHERE id=%s",
+                (oid,),
+            )
+        flash("已拒绝退款，订单恢复为待收货", "info")
+    except Exception:
+        flash("退款处理失败，请重试", "danger")
+    return redirect(url_for("order_detail", oid=oid))
+
+
+@app.route("/order/<int:oid>/refund/cancel", methods=["POST"])
+@login_required
+def cancel_refund_request(oid):
+    buyer_id = session["user_id"]
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
+            order = cur.fetchone()
+            if not order:
+                flash("订单不存在", "danger")
+                return redirect(url_for("index"))
+            if order["buyer_id"] != buyer_id:
+                abort(403)
+            if order["status"] != "refund_requested":
+                flash("当前订单没有待撤回的退款申请", "warning")
+                return redirect(url_for("order_detail", oid=oid))
+
+            cur.execute(
+                "UPDATE orders SET status='paid', refund_reason=NULL, "
+                "refund_requested_at=NULL WHERE id=%s",
+                (oid,),
+            )
+        flash("退款申请已撤回，订单恢复为待收货", "info")
+    except Exception:
+        flash("撤回退款失败，请重试", "danger")
     return redirect(url_for("order_detail", oid=oid))
 
 

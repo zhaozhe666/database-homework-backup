@@ -27,6 +27,7 @@
           <span class="conversation-time">{{ conversation.last_at }}</span>
         </a>
         <form action="{{ url_for('delete_conversation', other_id=conversation.other_user_id) }}" method="post">
+          {{ csrf_field() }}
           <button type="submit" class="conversation-delete" onclick="return confirm('确定删除这个对话吗？')">删除</button>
         </form>
       </div>
@@ -41,6 +42,7 @@
           <span>对话</span>
         </div>
         <form action="{{ url_for('delete_conversation', other_id=selected_user.id) }}" method="post">
+          {{ csrf_field() }}
           <button type="submit" class="btn-outline btn-xs" onclick="return confirm('确定删除这个对话吗？')">删除对话</button>
         </form>
       </div>
@@ -62,6 +64,7 @@
       </div>
 
       <form action="{{ url_for('reply_conversation', other_id=selected_user.id) }}" method="post" class="chat-reply">
+        {{ csrf_field() }}
         {% if reply_product_id %}
           <input type="hidden" name="product_id" value="{{ reply_product_id }}">
         {% endif %}

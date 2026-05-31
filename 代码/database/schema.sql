@@ -119,6 +119,7 @@ CREATE TABLE favorites (
 -- 状态机：created(待支付) -> paid(已支付/待收货) -> completed(已完成)
 --        created -> cancelled(已取消)
 --        paid -> refund_requested(退款申请中) -> refunded(已退款)
+--        refund_requested -> paid(买家撤回/卖家拒绝) 或 completed(买家确认收货)
 -- ---------------------------------------------------------------------
 CREATE TABLE orders (
   id           INT UNSIGNED NOT NULL AUTO_INCREMENT,

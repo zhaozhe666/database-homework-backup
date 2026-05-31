@@ -54,19 +54,23 @@
     {% if order.status == 'created' and is_buyer %}
       <p class="own-tip">请在 10 分钟内付款，超时订单会自动取消。</p>
       <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
         <button class="btn-primary" data-pay-submit>余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
       </form>
     {% endif %}
     {% if order.status == 'created' and (is_buyer or is_seller) %}
       <form action="{{ url_for('cancel_order', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
         <button class="btn-outline">取消订单</button>
       </form>
     {% endif %}
     {% if order.status == 'paid' and is_buyer %}
       <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
         <button class="btn-primary">确认收货</button>
       </form>
       <form action="{{ url_for('request_refund', oid=order.id) }}" method="post" class="refund-form">
+        {{ csrf_field() }}
         <input type="text" name="reason" maxlength="255" placeholder="申请退款原因（选填）">
         <button class="btn-outline" type="submit">申请退款</button>
       </form>
@@ -75,11 +79,24 @@
       <p class="own-tip">买家已付款（平台托管中），请尽快发货，待买家确认收货后到账。</p>
     {% endif %}
     {% if order.status == 'refund_requested' and is_buyer %}
-      <p class="own-tip">退款申请已提交，等待卖家同意。</p>
+      <p class="own-tip">退款申请已提交，等待卖家处理；你也可以撤回申请或确认收货。</p>
+      <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
+        <button class="btn-primary">确认收货</button>
+      </form>
+      <form action="{{ url_for('cancel_refund_request', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
+        <button class="btn-outline">撤回退款申请</button>
+      </form>
     {% endif %}
     {% if order.status == 'refund_requested' and is_seller %}
       <form action="{{ url_for('approve_refund', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
         <button class="btn-primary">同意退款</button>
+      </form>
+      <form action="{{ url_for('reject_refund', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
+        <button class="btn-outline">拒绝退款</button>
       </form>
     {% endif %}
     {% if order.status == 'refunded' %}
@@ -127,6 +144,7 @@
 
     {% if not my_review and review_target_id %}
       <form action="{{ url_for('review_order', oid=order.id) }}" method="post" class="review-form">
+        {{ csrf_field() }}
         <label>评分
           <select name="rating" required>
             <option value="5">5 分 非常满意</option>

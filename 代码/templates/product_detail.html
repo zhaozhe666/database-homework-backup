@@ -48,10 +48,12 @@
       {% if current_user and current_user.id != product.seller_id %}
         {% if product.is_favorited %}
           <form action="{{ url_for('unfavorite_product', pid=product.id) }}" method="post">
+            {{ csrf_field() }}
             <button type="submit" class="btn-outline btn-favorite active">已收藏</button>
           </form>
         {% else %}
           <form action="{{ url_for('favorite_product', pid=product.id) }}" method="post">
+            {{ csrf_field() }}
             <button type="submit" class="btn-outline btn-favorite">收藏</button>
           </form>
         {% endif %}
@@ -63,6 +65,7 @@
     {% if product.status == 'on_sale' %}
       {% if current_user and current_user.id != product.seller_id %}
         <form action="{{ url_for('create_order') }}" method="post" class="buy-form">
+          {{ csrf_field() }}
           <input type="hidden" name="product_id" value="{{ product.id }}">
           <input type="text" name="address" placeholder="填写收货地址（选填）">
           <button type="submit" class="btn-primary">立即购买</button>
@@ -78,6 +81,7 @@
 
     {% if current_user and current_user.id != product.seller_id %}
       <form action="{{ url_for('send_product_message', pid=product.id) }}" method="post" class="message-form">
+        {{ csrf_field() }}
         <textarea name="content" rows="3" maxlength="500" placeholder="想问卖家什么？比如成色细节、取货地点、是否可小刀"></textarea>
         <button type="submit" class="btn-outline">联系卖家</button>
       </form>

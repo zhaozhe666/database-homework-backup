@@ -3,6 +3,7 @@
 import io
 import random
 import sys
+from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
@@ -15,7 +16,18 @@ client = app.test_client()
 ensure_runtime_schema()
 
 
+def csrf_value():
+    with client.session_transaction() as sess:
+        token = sess.get("_csrf_token")
+        if not token:
+            token = "verify-csrf-token"
+            sess["_csrf_token"] = token
+        return token
+
+
 def post(path, **data):
+    data = dict(data)
+    data["_csrf_token"] = csrf_value()
     return client.post(path, data=data, follow_redirects=True)
 
 
@@ -72,6 +84,8 @@ original_admin_registration_setting = db.query_one(
 print("用户数:", db.query_one("SELECT COUNT(*) c FROM users")["c"])
 print("分类数:", db.query_one("SELECT COUNT(*) c FROM categories")["c"])
 print("商品数:", db.query_one("SELECT COUNT(*) c FROM products")["c"])
+assert client.post("/login", data={"username": "nobody", "password": "wrong"}).status_code == 400
+print("CSRF 无 token POST 拦截 OK")
 
 
 sfx = random.randint(100000, 999999)
@@ -107,10 +121,26 @@ post("/publish", title=f"验证商品{sfx}", description="端到端验证用商�
      image_url="/static/product_images/iphone13-blue.jpg")
 pid = db.query_one("SELECT id FROM products WHERE title=%s",
                    (f"验证商品{sfx}",))["id"]
+post("/publish", title=f"撤回退款商品{sfx}", description="中文文件名上传验证",
+     price="100.00", category_id="1", condition_level="9成新",
+     image_files=(io.BytesIO(b"fake image bytes"), "图片.jpg"))
+cancel_refund_pid = db.query_one("SELECT id FROM products WHERE title=%s",
+                                 (f"撤回退款商品{sfx}",))["id"]
+post("/publish", title=f"拒绝退款商品{sfx}", description="退款拒绝验证用商品",
+     price="100.00", category_id="1", condition_level="9成新",
+     image_url="/static/product_images/camera-vlog.jpg")
+reject_refund_pid = db.query_one("SELECT id FROM products WHERE title=%s",
+                                 (f"拒绝退款商品{sfx}",))["id"]
 print("发布商品 id =", pid,
       "| 状态 =", db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"])
 assert db.query_one(
     "SELECT COUNT(*) c FROM product_images WHERE product_id=%s", (pid,))["c"] == 1
+chinese_upload_url = db.query_one(
+    "SELECT image_url FROM product_images WHERE product_id=%s ORDER BY sort_no LIMIT 1",
+    (cancel_refund_pid,),
+)["image_url"]
+print("中文图片名上传路径 =", chinese_upload_url)
+assert chinese_upload_url.startswith("/static/uploads/")
 client.get("/logout")
 
 post("/login", username=admin["username"], password=admin["password"])
@@ -201,6 +231,28 @@ post(f"/order/{refund_oid}/refund/request", reason="临时不需要了")
 print("申请退款后订单状态 =",
       db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"])
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"] == "refund_requested"
+
+post("/order/create", product_id=str(cancel_refund_pid), address="松园3栋")
+cancel_refund_oid = latest_order_id(cancel_refund_pid)
+post(f"/order/{cancel_refund_oid}/pay")
+post(f"/order/{cancel_refund_oid}/refund/request", reason="想想还是要")
+post(f"/order/{cancel_refund_oid}/refund/cancel")
+cancel_refund_order = db.query_one(
+    "SELECT status, refund_reason, refund_requested_at FROM orders WHERE id=%s",
+    (cancel_refund_oid,),
+)
+print("买家撤回退款后订单状态 =", cancel_refund_order["status"])
+assert cancel_refund_order["status"] == "paid"
+assert cancel_refund_order["refund_reason"] is None
+assert cancel_refund_order["refund_requested_at"] is None
+
+post("/order/create", product_id=str(reject_refund_pid), address="松园3栋")
+reject_refund_oid = latest_order_id(reject_refund_pid)
+post(f"/order/{reject_refund_oid}/pay")
+post(f"/order/{reject_refund_oid}/refund/request", reason="想退款")
+assert db.query_one(
+    "SELECT status FROM orders WHERE id=%s", (reject_refund_oid,),
+)["status"] == "refund_requested"
 client.get("/logout")
 
 post("/login", username=seller["username"], password="pass1234")
@@ -233,6 +285,15 @@ assert db.query_one(
 )["c"] == 1
 print("删除单个对话后保留其他对话 OK")
 print("提醒中心状态码 =", client.get("/me/notifications").status_code)
+post(f"/order/{reject_refund_oid}/refund/reject")
+reject_refund_order = db.query_one(
+    "SELECT status, refund_reason, refund_requested_at FROM orders WHERE id=%s",
+    (reject_refund_oid,),
+)
+print("卖家拒绝退款后订单状态 =", reject_refund_order["status"])
+assert reject_refund_order["status"] == "paid"
+assert reject_refund_order["refund_reason"] is None
+assert reject_refund_order["refund_requested_at"] is None
 post(f"/order/{refund_oid}/refund/approve")
 refund_order = db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))
 buyer_balance_after_refund = db.query_one(
@@ -264,13 +325,18 @@ print("首页状态码 =", client.get("/").status_code)
 print("商品详情状态码 =", client.get(f"/product/{pid}").status_code)
 
 # 清理测试数据。
-for oid in [timeout_oid, refund_oid, complete_oid]:
+for oid in [timeout_oid, refund_oid, cancel_refund_oid, reject_refund_oid, complete_oid]:
     db.execute("DELETE FROM reviews WHERE order_id=%s", (oid,))
     db.execute("DELETE FROM payments WHERE order_id=%s", (oid,))
     db.execute("DELETE FROM orders WHERE id=%s", (oid,))
 db.execute("DELETE FROM messages WHERE product_id=%s", (pid,))
 db.execute("DELETE FROM favorites WHERE product_id=%s", (pid,))
-db.execute("DELETE FROM products WHERE id=%s", (pid,))
+db.execute("DELETE FROM products WHERE id IN (%s,%s,%s)",
+           (pid, cancel_refund_pid, reject_refund_pid))
+if chinese_upload_url.startswith("/static/"):
+    uploaded_path = Path(app.static_folder) / chinese_upload_url[len("/static/"):]
+    if uploaded_path.exists():
+        uploaded_path.unlink()
 db.execute("DELETE FROM users WHERE username IN (%s,%s,%s,%s)",
            (buyer["username"], seller["username"], buyer2["username"], admin["username"]))
 print("清理完成，超时取消、退款、评价和消息全部通过 OK")
