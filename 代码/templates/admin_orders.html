@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}订单管理 · 二手集市{% endblock %}
+{% block content %}
+<div class="admin-head">
+  <div>
+    <h2 class="page-title">订单管理</h2>
+    <p class="admin-subtitle">查看全站订单状态、买卖双方和交易金额。</p>
+  </div>
+  <div class="admin-tabs">
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
+    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
+    {% if current_user.admin.can_manage_users %}<a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>{% endif %}
+    {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
+  </div>
+</div>
+
+<form class="admin-searchbar" action="{{ url_for('admin_orders') }}" method="get">
+  {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+  <input type="search" name="q" value="{{ keyword or '' }}" placeholder="搜索订单号、商品、买家、卖家或订单状态">
+  <button class="btn-primary btn-xs" type="submit">搜索</button>
+  {% if keyword or status_filter %}
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_orders') }}">清空</a>
+  {% endif %}
+  <span class="admin-search-count">当前显示 {{ orders|length }} 个订单</span>
+</form>
+
+<div class="admin-filterbar">
+  <a class="{{ 'active' if not status_filter else '' }}" href="{{ url_for('admin_orders', q=keyword) if keyword else url_for('admin_orders') }}">
+    全部 <span>{{ total_orders }}</span>
+  </a>
+  {% for key, label in ORDER_STATUS.items() %}
+    <a class="{{ 'active' if status_filter == key else '' }}" href="{{ url_for('admin_orders', status=key, q=keyword) if keyword else url_for('admin_orders', status=key) }}">
+      {{ label }} <span>{{ status_counts.get(key, 0) }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+{% if orders %}
+<table class="list-table admin-table admin-order-table">
+  <tr>
+    <th>订单</th><th>商品</th><th>买家</th><th>卖家</th><th>金额</th><th>状态</th><th>时间</th><th>操作</th>
+  </tr>
+  {% for o in orders %}
+  <tr>
+    <td>
+      <a href="{{ url_for('order_detail', oid=o.id) }}">{{ o.order_no }}</a>
+      <div class="muted">ID {{ o.id }}</div>
+    </td>
+    <td><a href="{{ url_for('product_detail', pid=o.product_id) }}">{{ o.title }}</a></td>
+    <td>{{ o.buyer_name }}</td>
+    <td>{{ o.seller_name }}</td>
+    <td>¥{{ '%.2f'|format(o.amount) }}</td>
+    <td><span class="status status-{{ o.status }}">{{ ORDER_STATUS[o.status] }}</span></td>
+    <td>
+      <div>{{ o.created_at }}</div>
+      {% if o.paid_at %}<div class="muted">支付 {{ o.paid_at }}</div>{% endif %}
+      {% if o.completed_at %}<div class="muted">完成 {{ o.completed_at }}</div>{% endif %}
+      {% if o.cancelled_at %}<div class="muted">取消 {{ o.cancelled_at }}</div>{% endif %}
+    </td>
+    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+  <div class="empty">{{ '没有匹配的订单。' if keyword else '暂无符合条件的订单。' }}</div>
+{% endif %}
+{% endblock %}

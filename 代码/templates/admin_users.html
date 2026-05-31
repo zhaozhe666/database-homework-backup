@@ -6,13 +6,24 @@
   <div class="admin-tabs">
     <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
     {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_orders') }}">订单管理</a>
     {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
   </div>
 </div>
 
+<form class="admin-searchbar" action="{{ url_for('admin_users') }}" method="get">
+  <input type="search" name="q" value="{{ keyword or '' }}" placeholder="搜索昵称、账号、手机号、管理员、启用或停用">
+  <button class="btn-primary btn-xs" type="submit">搜索</button>
+  {% if keyword %}
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">清空</a>
+  {% endif %}
+  <span class="admin-search-count">找到 {{ users|length }} 个用户</span>
+</form>
+
+{% if users %}
 <table class="list-table admin-table">
   <tr>
-    <th>用户</th><th>身份</th><th>状态</th><th>余额</th><th>商品/订单</th><th>注册时间</th><th>权限</th><th>操作</th>
+    <th>用户</th><th>身份</th><th>状态</th><th>余额</th><th>交易统计</th><th>注册时间</th><th>权限</th><th>操作</th>
   </tr>
   {% for u in users %}
   <tr>
@@ -29,7 +40,13 @@
       {% endif %}
     </td>
     <td>¥{{ '%.2f'|format(u.balance) }}</td>
-    <td>{{ u.product_count }} / {{ u.order_count }}</td>
+    <td>
+      <div class="admin-user-metrics">
+        <span><b>{{ u.product_count }}</b> 发布商品</span>
+        <span><b>{{ u.bought_count }}</b> 购买订单</span>
+        <span><b>{{ u.sold_count }}</b> 卖出订单</span>
+      </div>
+    </td>
     <td>{{ u.created_at }}</td>
     <td>
       <form action="{{ url_for('admin_update_user_permissions', uid=u.id) }}" method="post" class="admin-permission-form">
@@ -56,4 +73,7 @@
   </tr>
   {% endfor %}
 </table>
+{% else %}
+  <div class="empty">{{ '没有匹配的用户。' if keyword else '暂无用户。' }}</div>
+{% endif %}
 {% endblock %}

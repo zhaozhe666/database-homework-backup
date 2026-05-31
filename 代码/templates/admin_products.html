@@ -5,10 +5,20 @@
   <h2 class="page-title">商品管理</h2>
   <div class="admin-tabs">
     <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_orders') }}">订单管理</a>
     {% if current_user.admin.can_manage_users %}<a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>{% endif %}
     {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
   </div>
 </div>
+
+<form class="admin-searchbar" action="{{ url_for('admin_products') }}" method="get">
+  <input type="search" name="q" value="{{ keyword or '' }}" placeholder="搜索商品标题、卖家、分类、状态或下架原因">
+  <button class="btn-primary btn-xs" type="submit">搜索</button>
+  {% if keyword %}
+    <a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">清空</a>
+  {% endif %}
+  <span class="admin-search-count">找到 {{ products|length }} 个商品</span>
+</form>
 
 {% if products %}
 <table class="list-table admin-table">
@@ -52,6 +62,6 @@
   {% endfor %}
 </table>
 {% else %}
-  <div class="empty">暂无商品。</div>
+  <div class="empty">{{ '没有匹配的商品。' if keyword else '暂无商品。' }}</div>
 {% endif %}
 {% endblock %}

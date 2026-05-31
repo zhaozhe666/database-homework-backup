@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
-"""二手交易平台 Web 应用（Flask）。
+"""校园二手交易平台 Web 应用（Flask）。
 
-核心业务闭环：
-    注册/登录 -> 发布/浏览商品 -> 下单(锁定商品) -> 余额支付(平台托管)
-    -> 确认收货(打款给卖家) -> 交易完成
+当前功能覆盖：
+    注册/登录、个人资料与密码修改、商品发布与多图上传、收藏、站内消息、
+    10 分钟待支付倒计时、余额支付、退款、确认收货、评价，以及管理员后台。
+
+核心交易闭环：
+    发布/浏览商品 -> 下单(锁定商品) -> 余额支付(平台托管)
+    -> 确认收货(打款给卖家) -> 买卖双方评价 -> 交易完成
 """
 
 import functools
@@ -837,16 +841,113 @@ def logout():
 def admin_dashboard():
     stats = {
         "users": query_one("SELECT COUNT(*) AS c FROM users")["c"],
+        "active_users": query_one("SELECT COUNT(*) AS c FROM users WHERE is_active=1")["c"],
         "products": query_one("SELECT COUNT(*) AS c FROM products")["c"],
+        "on_sale_products": query_one("SELECT COUNT(*) AS c FROM products WHERE status='on_sale'")["c"],
+        "locked_products": query_one("SELECT COUNT(*) AS c FROM products WHERE status='locked'")["c"],
         "removed_products": query_one("SELECT COUNT(*) AS c FROM products WHERE status='removed'")["c"],
         "orders": query_one("SELECT COUNT(*) AS c FROM orders")["c"],
+        "pending_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='created'")["c"],
+        "paid_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='paid'")["c"],
+        "refund_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='refund_requested'")["c"],
     }
-    return render_template("admin_dashboard.html", stats=stats)
+    recent_orders = query_all(
+        "SELECT o.*, p.title, bu.nickname AS buyer_name, su.nickname AS seller_name "
+        "FROM orders o "
+        "JOIN products p ON o.product_id = p.id "
+        "JOIN users bu ON o.buyer_id = bu.id "
+        "JOIN users su ON o.seller_id = su.id "
+        "ORDER BY o.created_at DESC LIMIT 6"
+    )
+    return render_template("admin_dashboard.html", stats=stats, recent_orders=recent_orders)
+
+
+@app.route("/admin/orders")
+@admin_required()
+def admin_orders():
+    status_filter = request.args.get("status", "").strip()
+    keyword = request.args.get("q", "").strip()
+    where_clauses = []
+    params = []
+    if status_filter in ORDER_STATUS:
+        where_clauses.append("o.status=%s")
+        params.append(status_filter)
+    else:
+        status_filter = ""
+    if keyword:
+        like = "%%%s%%" % keyword
+        search_clauses = [
+            "o.order_no LIKE %s",
+            "p.title LIKE %s",
+            "bu.nickname LIKE %s",
+            "bu.username LIKE %s",
+            "su.nickname LIKE %s",
+            "su.username LIKE %s",
+        ]
+        params.extend([like] * len(search_clauses))
+        matched_statuses = [
+            key for key, label in ORDER_STATUS.items()
+            if keyword.lower() in key.lower() or keyword in label
+        ]
+        if matched_statuses:
+            placeholders = ", ".join(["%s"] * len(matched_statuses))
+            search_clauses.append("o.status IN (%s)" % placeholders)
+            params.extend(matched_statuses)
+        where_clauses.append("(" + " OR ".join(search_clauses) + ")")
+    where_sql = ("WHERE " + " AND ".join(where_clauses) + " ") if where_clauses else ""
+
+    orders = query_all(
+        "SELECT o.*, p.title, bu.nickname AS buyer_name, su.nickname AS seller_name "
+        "FROM orders o "
+        "JOIN products p ON o.product_id = p.id "
+        "JOIN users bu ON o.buyer_id = bu.id "
+        "JOIN users su ON o.seller_id = su.id "
+        f"{where_sql}"
+        "ORDER BY o.created_at DESC",
+        tuple(params),
+    )
+    status_counts = {row["status"]: row["c"] for row in query_all(
+        "SELECT status, COUNT(*) AS c FROM orders GROUP BY status"
+    )}
+    total_orders = sum(status_counts.values())
+    return render_template(
+        "admin_orders.html",
+        orders=orders,
+        keyword=keyword,
+        status_filter=status_filter,
+        status_counts=status_counts,
+        total_orders=total_orders,
+    )
 
 
 @app.route("/admin/products")
 @admin_required("can_manage_products")
 def admin_products():
+    keyword = request.args.get("q", "").strip()
+    where_sql = ""
+    params = []
+    if keyword:
+        like = "%%%s%%" % keyword
+        search_clauses = [
+            "p.title LIKE %s",
+            "p.description LIKE %s",
+            "u.nickname LIKE %s",
+            "u.username LIKE %s",
+            "c.name LIKE %s",
+            "p.condition_level LIKE %s",
+            "p.removal_reason LIKE %s",
+        ]
+        params.extend([like] * len(search_clauses))
+        matched_statuses = [
+            key for key, label in PRODUCT_STATUS.items()
+            if keyword.lower() in key.lower() or keyword in label
+        ]
+        if matched_statuses:
+            placeholders = ", ".join(["%s"] * len(matched_statuses))
+            search_clauses.append("p.status IN (%s)" % placeholders)
+            params.extend(matched_statuses)
+        where_sql = "WHERE " + " OR ".join(search_clauses) + " "
+
     products = hydrate_product_images(query_all(
         "SELECT p.*, c.name AS category_name, u.nickname AS seller_name, "
         "rb.nickname AS removed_by_name "
@@ -854,9 +955,11 @@ def admin_products():
         "LEFT JOIN categories c ON p.category_id = c.id "
         "JOIN users u ON p.seller_id = u.id "
         "LEFT JOIN users rb ON p.removed_by = rb.id "
+        f"{where_sql}"
         "ORDER BY p.created_at DESC",
+        tuple(params),
     ))
-    return render_template("admin_products.html", products=products)
+    return render_template("admin_products.html", products=products, keyword=keyword)
 
 
 @app.route("/admin/products/<int:pid>/remove", methods=["POST"])
@@ -910,17 +1013,42 @@ def admin_restore_product(pid):
 @app.route("/admin/users")
 @admin_required("can_manage_users")
 def admin_users():
+    keyword = request.args.get("q", "").strip()
+    where_sql = ""
+    params = []
+    if keyword:
+        keyword_lower = keyword.lower()
+        like = "%%%s%%" % keyword
+        search_clauses = [
+            "u.nickname LIKE %s",
+            "u.username LIKE %s",
+            "u.phone LIKE %s",
+        ]
+        params.extend([like] * len(search_clauses))
+        if "管理员".find(keyword) >= 0 or keyword_lower in ("admin", "administrator"):
+            search_clauses.append("a.id IS NOT NULL")
+        if "普通用户".find(keyword) >= 0:
+            search_clauses.append("a.id IS NULL")
+        if "启用".find(keyword) >= 0:
+            search_clauses.append("u.is_active=1")
+        if "停用".find(keyword) >= 0:
+            search_clauses.append("u.is_active=0")
+        where_sql = "WHERE " + " OR ".join(search_clauses) + " "
+
     users = query_all(
         "SELECT u.*, a.id AS admin_id, "
         "a.can_manage_products, a.can_manage_users, a.can_manage_admin_register, "
         "(SELECT COUNT(*) FROM products p WHERE p.seller_id=u.id) AS product_count, "
-        "(SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id OR o.seller_id=u.id) AS order_count "
+        "(SELECT COUNT(*) FROM orders o WHERE o.buyer_id=u.id) AS bought_count, "
+        "(SELECT COUNT(*) FROM orders o WHERE o.seller_id=u.id) AS sold_count "
         "FROM users u "
         "LEFT JOIN admins a ON a.user_id = u.id "
-        "ORDER BY u.created_at DESC"
+        f"{where_sql}"
+        "ORDER BY u.created_at DESC",
+        tuple(params),
     )
     admin_count = active_admin_count()
-    return render_template("admin_users.html", users=users, admin_count=admin_count)
+    return render_template("admin_users.html", users=users, admin_count=admin_count, keyword=keyword)
 
 
 @app.route("/admin/users/<int:uid>/admin", methods=["POST"])
@@ -1266,7 +1394,7 @@ def order_detail(oid):
     if not order:
         abort(404)
     uid = session["user_id"]
-    if uid not in (order["buyer_id"], order["seller_id"]):
+    if uid not in (order["buyer_id"], order["seller_id"]) and not is_admin():
         abort(403)
     order = hydrate_product_images([order])[0]
     payment_deadline = None

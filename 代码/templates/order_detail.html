@@ -2,6 +2,7 @@
 {% block title %}订单详情 · 二手集市{% endblock %}
 {% block content %}
 {% set is_buyer = current_user.id == order.buyer_id %}
+{% set is_seller = current_user.id == order.seller_id %}
 <div class="order-box">
   <div class="order-head">
     <h2>订单详情</h2>
@@ -56,7 +57,7 @@
         <button class="btn-primary" data-pay-submit>余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
       </form>
     {% endif %}
-    {% if order.status == 'created' %}
+    {% if order.status == 'created' and (is_buyer or is_seller) %}
       <form action="{{ url_for('cancel_order', oid=order.id) }}" method="post" style="display:inline">
         <button class="btn-outline">取消订单</button>
       </form>
@@ -70,13 +71,13 @@
         <button class="btn-outline" type="submit">申请退款</button>
       </form>
     {% endif %}
-    {% if order.status == 'paid' and not is_buyer %}
+    {% if order.status == 'paid' and is_seller %}
       <p class="own-tip">买家已付款（平台托管中），请尽快发货，待买家确认收货后到账。</p>
     {% endif %}
     {% if order.status == 'refund_requested' and is_buyer %}
       <p class="own-tip">退款申请已提交，等待卖家同意。</p>
     {% endif %}
-    {% if order.status == 'refund_requested' and not is_buyer %}
+    {% if order.status == 'refund_requested' and is_seller %}
       <form action="{{ url_for('approve_refund', oid=order.id) }}" method="post" style="display:inline">
         <button class="btn-primary">同意退款</button>
       </form>
