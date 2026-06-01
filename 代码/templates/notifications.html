@@ -17,8 +17,10 @@
 {% if event_notifications or unread_conversations or shipment_orders or refund_orders %}
 <div class="notification-list">
   {% for notice in event_notifications %}
-    {% set notice_url = url_for('order_detail', oid=notice.order_id) if notice.order_id else (url_for('product_detail', pid=notice.product_id) if notice.product_id else '#') %}
-    <a class="notification-item event {% if notice.is_read %}read{% else %}unread{% endif %}" href="{{ notice_url }}">
+    {% set notice_url = url_for('open_notification', nid=notice.id) %}
+    <form class="notification-form" method="post" action="{{ notice_url }}">
+      {{ csrf_field() }}
+    <button class="notification-item event {% if notice.is_read %}read{% else %}unread{% endif %}" type="submit">
       <span class="notification-dot"></span>
       <div>
         <div class="notification-title">
@@ -35,7 +37,8 @@
         {% endif %}
         <small>{{ notice.created_at }}</small>
       </div>
-    </a>
+    </button>
+    </form>
   {% endfor %}
 
   {% for conversation in unread_conversations %}

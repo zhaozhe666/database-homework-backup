@@ -45,6 +45,7 @@ EXPIRED_ORDER_REFRESH_ENDPOINTS = {
     "index", "product_detail", "order_detail",
     "admin_dashboard", "admin_orders",
     "my_selling", "my_favorites", "my_bought", "my_sold",
+    "my_notifications",
 }
 
 # 状态中文映射，供模板显示
@@ -125,6 +126,9 @@ def active_admin_count(permission=None):
     return row["c"] if row else 0
 
 
+SELLER_TASK_NOTICE_TYPES = ("order_paid", "refund_requested")
+
+
 def notification_summary(user_id):
     """返回全局提醒数量：未读消息 + 未读事件 + 待卖家处理的退款/发货订单。"""
     unread_messages = query_one(
@@ -133,7 +137,9 @@ def notification_summary(user_id):
         (user_id,),
     )["c"]
     unread_notifications = query_one(
-        "SELECT COUNT(*) AS c FROM notifications WHERE user_id=%s AND is_read=0",
+        "SELECT COUNT(*) AS c FROM notifications "
+        "WHERE user_id=%s AND is_read=0 "
+        "AND NOT (notice_type IN ('order_paid','refund_requested') AND actor_id IS NOT NULL)",
         (user_id,),
     )["c"]
     refund_requests = query_one(
@@ -163,6 +169,26 @@ def add_notification(cur, user_id, notice_type, title, content=None, order_id=No
         "VALUES (%s, %s, %s, %s, %s, %s, %s)",
         (user_id, actor_id, order_id, product_id, notice_type, title, content),
     )
+
+
+def mark_order_notifications_read(cur, user_id, order_id, notice_types=None):
+    """把某个订单关联的事件提醒设为已读，避免状态已处理后仍红点提醒。"""
+    if not user_id or not order_id:
+        return
+    if notice_types:
+        placeholders = ",".join(["%s"] * len(notice_types))
+        cur.execute(
+            "UPDATE notifications SET is_read=1 "
+            "WHERE user_id=%s AND order_id=%s AND is_read=0 "
+            "AND notice_type IN (" + placeholders + ")",
+            (user_id, order_id, *notice_types),
+        )
+    else:
+        cur.execute(
+            "UPDATE notifications SET is_read=1 "
+            "WHERE user_id=%s AND order_id=%s AND is_read=0",
+            (user_id, order_id),
+        )
 
 
 def csrf_token():
@@ -511,6 +537,13 @@ def sync_order_schema(cur):
     add_column_if_missing(cur, "orders", "shipped_at", "DATETIME DEFAULT NULL")
 
 
+def sync_payment_schema(cur):
+    cur.execute(
+        "ALTER TABLE payments MODIFY status "
+        "ENUM('success','failed','refunded') NOT NULL DEFAULT 'success'"
+    )
+
+
 def cancel_expired_unpaid_orders():
     """把超过付款时限的待支付订单自动取消，并释放商品。"""
     with get_cursor(commit=True) as cur:
@@ -529,7 +562,16 @@ def cancel_expired_unpaid_orders():
             "AND o.created_at <= DATE_SUB(NOW(), INTERVAL %s MINUTE)",
             (ORDER_PAYMENT_TIMEOUT_MINUTES,),
         )
+        if cur.rowcount <= 0:
+            return
         for order in expired_orders:
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM notifications "
+                "WHERE order_id=%s AND notice_type='order_timeout_cancelled'",
+                (order["id"],),
+            )
+            if cur.fetchone()["c"]:
+                continue
             add_notification(
                 cur,
                 order["buyer_id"],
@@ -716,7 +758,7 @@ def ensure_runtime_schema():
               product_id INT UNSIGNED DEFAULT NULL,
               notice_type VARCHAR(40) NOT NULL,
               title VARCHAR(120) NOT NULL,
-              content VARCHAR(500) DEFAULT NULL,
+              content TEXT DEFAULT NULL,
               is_read TINYINT(1) NOT NULL DEFAULT 0,
               created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
               PRIMARY KEY (id),
@@ -734,6 +776,16 @@ def ensure_runtime_schema():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """
         )
+        sync_payment_schema(cur)
+        add_column_if_missing(cur, "notifications", "actor_id", "INT UNSIGNED DEFAULT NULL")
+        add_column_if_missing(cur, "notifications", "order_id", "INT UNSIGNED DEFAULT NULL")
+        add_column_if_missing(cur, "notifications", "product_id", "INT UNSIGNED DEFAULT NULL")
+        add_column_if_missing(cur, "notifications", "notice_type", "VARCHAR(40) NOT NULL DEFAULT 'system'")
+        add_column_if_missing(cur, "notifications", "title", "VARCHAR(120) NOT NULL DEFAULT '系统提醒'")
+        add_column_if_missing(cur, "notifications", "content", "TEXT DEFAULT NULL")
+        add_column_if_missing(cur, "notifications", "is_read", "TINYINT(1) NOT NULL DEFAULT 0")
+        add_column_if_missing(cur, "notifications", "created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        cur.execute("ALTER TABLE notifications MODIFY content TEXT DEFAULT NULL")
         add_column_if_missing(cur, "messages", "sender_deleted", "TINYINT(1) NOT NULL DEFAULT 0")
         add_column_if_missing(cur, "messages", "receiver_deleted", "TINYINT(1) NOT NULL DEFAULT 0")
         cur.execute(
@@ -1749,6 +1801,7 @@ def ship_order(oid):
                 flash("只有已付款待发货订单可以标记发货", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            mark_order_notifications_read(cur, seller_id, oid, ("order_paid",))
             cur.execute(
                 "UPDATE orders SET status='shipped', shipped_at=NOW() "
                 "WHERE id=%s AND status='paid'",
@@ -1832,9 +1885,15 @@ def approve_refund(oid):
                 flash("当前订单没有待处理的退款申请", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            mark_order_notifications_read(cur, seller_id, oid, ("refund_requested",))
             cur.execute(
                 "UPDATE users SET balance = balance + %s WHERE id=%s",
                 (order["amount"], order["buyer_id"]),
+            )
+            cur.execute(
+                "INSERT INTO payments (order_id, amount, method, status) "
+                "VALUES (%s, %s, 'balance', 'refunded')",
+                (oid, order["amount"]),
             )
             cur.execute("UPDATE products SET status='on_sale' WHERE id=%s", (order["product_id"],))
             cur.execute(
@@ -1874,6 +1933,7 @@ def reject_refund(oid):
                 flash("当前订单没有待处理的退款申请", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            mark_order_notifications_read(cur, seller_id, oid, ("refund_requested",))
             resume_status = "shipped" if order.get("shipped_at") else "paid"
             cur.execute(
                 "UPDATE orders SET status=%s, refund_reason=NULL, "
@@ -1914,6 +1974,7 @@ def cancel_refund_request(oid):
                 flash("当前订单没有待撤回的退款申请", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            mark_order_notifications_read(cur, order["seller_id"], oid, ("refund_requested",))
             resume_status = "shipped" if order.get("shipped_at") else "paid"
             cur.execute(
                 "UPDATE orders SET status=%s, refund_reason=NULL, "
@@ -2181,6 +2242,7 @@ def my_notifications():
         "LEFT JOIN products p ON n.product_id = p.id "
         "LEFT JOIN orders o ON n.order_id = o.id "
         "WHERE n.user_id=%s "
+        "AND NOT (n.is_read=0 AND n.notice_type IN ('order_paid','refund_requested') AND n.actor_id IS NOT NULL) "
         "ORDER BY n.is_read ASC, n.created_at DESC LIMIT 50",
         (uid,),
     )
@@ -2209,6 +2271,22 @@ def my_notifications():
         shipment_orders=shipment_orders,
         refund_orders=refund_orders,
     )
+
+
+@app.route("/me/notifications/<int:nid>/open", methods=["POST"])
+@login_required
+def open_notification(nid):
+    uid = session["user_id"]
+    notice = query_one("SELECT * FROM notifications WHERE id=%s AND user_id=%s", (nid, uid))
+    if not notice:
+        abort(404)
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND user_id=%s", (nid, uid))
+    if notice.get("order_id"):
+        return redirect(url_for("order_detail", oid=notice["order_id"]))
+    if notice.get("product_id"):
+        return redirect(url_for("product_detail", pid=notice["product_id"]))
+    return redirect(url_for("my_notifications"))
 
 
 @app.route("/me/notifications/read-all", methods=["POST"])

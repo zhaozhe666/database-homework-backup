@@ -1379,14 +1379,23 @@ button, input, textarea, select { font: inherit; }
   gap: 12px;
 }
 
+.notification-form {
+  margin: 0;
+}
+
 .notification-item {
   display: grid;
   grid-template-columns: auto 1fr;
+  width: 100%;
   gap: 12px;
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
   box-shadow: 0 2px 12px rgba(25, 33, 52, .04);
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }

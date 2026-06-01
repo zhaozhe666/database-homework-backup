@@ -50,6 +50,11 @@ for column in ["refund_reason", "refund_requested_at", "refunded_at", "shipped_a
         "WHERE table_schema='secondhand' AND table_name='orders' AND column_name=%s",
         (column,),
     )["c"] == 1
+payment_status = db.query_one(
+    "SELECT COLUMN_TYPE FROM information_schema.columns "
+    "WHERE table_schema='secondhand' AND table_name='payments' AND column_name='status'",
+)["COLUMN_TYPE"]
+assert "refunded" in payment_status
 for column in ["sender_deleted", "receiver_deleted"]:
     assert db.query_one(
         "SELECT COUNT(*) c FROM information_schema.columns "
@@ -154,6 +159,12 @@ admin_removed = db.query_one(
 print("管理员下架状态 =", admin_removed["status"], "| 原因 =", admin_removed["removal_reason"])
 assert admin_removed["status"] == "removed"
 assert admin_removed["removal_reason"] == "测试违规下架"
+seller_id_for_admin = db.query_one("SELECT id FROM users WHERE username=%s", (seller["username"],))["id"]
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE user_id=%s AND product_id=%s AND notice_type='product_removed_by_admin'",
+    (seller_id_for_admin, pid),
+)["c"] == 1
 client.get("/logout")
 
 post("/login", username=seller["username"], password="pass1234")
@@ -172,7 +183,6 @@ post(f"/admin/products/{pid}/restore")
 assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "on_sale"
 print("管理员恢复商品 OK")
 print("后台用户页状态码 =", client.get("/admin/users").status_code)
-seller_id_for_admin = db.query_one("SELECT id FROM users WHERE username=%s", (seller["username"],))["id"]
 post(
     f"/admin/users/{seller_id_for_admin}/admin",
     is_admin="1",
@@ -202,6 +212,11 @@ created_admin_row = db.query_one(
 )
 assert created_admin_row
 assert created_admin_row["created_by"] == admin_id
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE user_id=%s AND notice_type='admin_account_created'",
+    (created_admin_row["user_id"],),
+)["c"] == 1
 post("/admin/settings")
 if original_admin_registration_setting == "1":
     post("/admin/settings", admin_registration_enabled="1")
@@ -233,6 +248,10 @@ print("买家充值后余额 =",
 # 10 分钟未付款自动取消：造一个待支付订单，把下单时间推到 11 分钟前，再访问页面触发自动清理。
 post("/order/create", product_id=str(pid), address="松园3栋")
 timeout_oid = latest_order_id(pid)
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='order_created'",
+    (timeout_oid,),
+)["c"] == 1
 db.execute("UPDATE orders SET created_at=DATE_SUB(NOW(), INTERVAL 11 MINUTE) WHERE id=%s", (timeout_oid,))
 client.get("/")
 timeout_order = db.query_one("SELECT status FROM orders WHERE id=%s", (timeout_oid,))
@@ -240,15 +259,27 @@ print("超时订单状态 =", timeout_order["status"],
       "| 商品状态 =", db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"])
 assert timeout_order["status"] == "cancelled"
 assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "on_sale"
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='order_timeout_cancelled'",
+    (timeout_oid,),
+)["c"] == 2
 
 # 已付款后申请退款，退款中不能直接确认收货，卖家同意后退回买家余额，商品恢复在售。
 post("/order/create", product_id=str(pid), address="松园3栋")
 refund_oid = latest_order_id(pid)
 post(f"/order/{refund_oid}/pay")
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='order_paid'",
+    (refund_oid,),
+)["c"] == 2
 post(f"/order/{refund_oid}/refund/request", reason="临时不需要了")
 print("申请退款后订单状态 =",
       db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"])
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"] == "refund_requested"
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='refund_requested'",
+    (refund_oid,),
+)["c"] == 1
 post(f"/order/{refund_oid}/complete")
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"] == "refund_requested"
 print("退款申请中禁止直接确认收货 OK")
@@ -258,6 +289,11 @@ cancel_refund_oid = latest_order_id(cancel_refund_pid)
 post(f"/order/{cancel_refund_oid}/pay")
 post(f"/order/{cancel_refund_oid}/refund/request", reason="想想还是要")
 post(f"/order/{cancel_refund_oid}/refund/cancel")
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE order_id=%s AND notice_type='refund_requested' AND is_read=0",
+    (cancel_refund_oid,),
+)["c"] == 0
 cancel_refund_order = db.query_one(
     "SELECT status, refund_reason, refund_requested_at FROM orders WHERE id=%s",
     (cancel_refund_oid,),
@@ -306,13 +342,35 @@ assert db.query_one(
 )["c"] == 1
 print("删除单个对话后保留其他对话 OK")
 print("提醒中心状态码 =", client.get("/me/notifications").status_code)
+seller_task_event_count = db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE user_id=%s AND is_read=0 AND notice_type IN ('order_paid','refund_requested')",
+    (seller_id,),
+)["c"]
+seller_notice_count = db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE user_id=%s AND is_read=0 "
+    "AND NOT (notice_type IN ('order_paid','refund_requested') AND actor_id IS NOT NULL)",
+    (seller_id,),
+)["c"]
 pending_shipments = db.query_one(
     "SELECT COUNT(*) c FROM orders WHERE seller_id=%s AND status='paid'",
     (seller_id,),
 )["c"]
 print("卖家待发货提醒数量 =", pending_shipments)
 assert pending_shipments >= 1
+assert seller_task_event_count >= 1
+summary = db.query_one(
+    "SELECT COUNT(*) c FROM orders WHERE seller_id=%s AND status='refund_requested'",
+    (seller_id,),
+)["c"] + pending_shipments + seller_notice_count
+assert summary >= pending_shipments
 post(f"/order/{reject_refund_oid}/refund/reject")
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE order_id=%s AND user_id=%s AND notice_type='refund_requested' AND is_read=0",
+    (reject_refund_oid, seller_id),
+)["c"] == 0
 reject_refund_order = db.query_one(
     "SELECT status, refund_reason, refund_requested_at FROM orders WHERE id=%s",
     (reject_refund_oid,),
@@ -322,6 +380,15 @@ assert reject_refund_order["status"] == "paid"
 assert reject_refund_order["refund_reason"] is None
 assert reject_refund_order["refund_requested_at"] is None
 post(f"/order/{refund_oid}/refund/approve")
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE order_id=%s AND user_id=%s AND notice_type='refund_requested' AND is_read=0",
+    (refund_oid, seller_id),
+)["c"] == 0
+assert db.query_one(
+    "SELECT COUNT(*) c FROM payments WHERE order_id=%s AND status='refunded'",
+    (refund_oid,),
+)["c"] == 1
 refund_order = db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))
 buyer_balance_after_refund = db.query_one(
     "SELECT balance FROM users WHERE username=%s", (buyer["username"],))["balance"]
@@ -345,11 +412,28 @@ client.get("/logout")
 post("/login", username=seller["username"], password="pass1234")
 post(f"/order/{complete_oid}/ship")
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "shipped"
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications "
+    "WHERE order_id=%s AND user_id=%s AND notice_type='order_paid' AND is_read=0",
+    (complete_oid, seller_id),
+)["c"] == 0
 client.get("/logout")
 
 post("/login", username=buyer["username"], password="pass1234")
 post(f"/order/{complete_oid}/complete")
 post(f"/order/{complete_oid}/review", rating="5", content="交易顺利，卖家沟通很及时。")
+buyer_notice = db.query_one(
+    "SELECT id, is_read FROM notifications "
+    "WHERE order_id=%s AND user_id=%s AND notice_type='order_shipped' "
+    "ORDER BY id DESC LIMIT 1",
+    (complete_oid, buyer_id),
+)
+assert buyer_notice and buyer_notice["is_read"] == 0
+post(f"/me/notifications/{buyer_notice['id']}/open")
+assert db.query_one(
+    "SELECT is_read FROM notifications WHERE id=%s",
+    (buyer_notice["id"],),
+)["is_read"] == 1
 print("完成订单状态 =",
       db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"],
       "| 商品状态 =",

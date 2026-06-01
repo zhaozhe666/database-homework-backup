@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -184,7 +184,7 @@ def generate_er_png() -> Path:
 
     draw.rectangle((0, 0, 2400, 165), fill="#e8f1ed")
     draw.text((690, 32), "校园二手交易平台数据库 ER 模型图", font=title_font, fill="#0c2f4a")
-    draw.text((700, 103), "当前代码版：7 张运行表 · 商品多图 product_images · 用户收藏 favorites", font=sub_font, fill="#546774")
+    draw.text((700, 103), "当前代码版：12 张运行表 · 多图/收藏/消息/提醒/管理员", font=sub_font, fill="#546774")
 
     boxes = {
         "users": draw_table_box(draw, 95, 230, 420, TABLES[0]),
@@ -300,7 +300,7 @@ def generate_report(er_path: Path) -> Path:
     out = UPDATE_DIR / "校园二手交易平台数据库课程设计报告.docx"
     doc = Document()
     apply_doc_styles(doc)
-    add_title(doc, "校园二手交易平台数据库课程设计报告", "当前代码版 · Flask + MySQL 5.6 · 7 张运行表")
+    add_title(doc, "校园二手交易平台数据库课程设计报告", "当前代码版 · Flask + MySQL 5.6 · 12 张运行表")
 
     add_table(
         doc,
@@ -310,7 +310,7 @@ def generate_report(er_path: Path) -> Path:
             ["项目主题", "校园二手交易平台"],
             ["数据库名", "secondhand"],
             ["运行环境", "Python Flask、MySQL 5.6、PyMySQL、Jinja2、原生 CSS"],
-            ["核心规模", "7 张运行表、7 个基础分类、3 个演示账号、7 件真实感演示商品"],
+            ["核心规模", "12 张运行表、7 个基础分类、3 个演示账号、15 件真实感演示商品"],
             ["当前重点功能", "商品多图表、我的收藏、本地多图上传、商品编辑/删除/重新上架、余额支付、个人资料与密码修改"],
         ],
         [3.2, 12.4],
@@ -323,7 +323,7 @@ def generate_report(er_path: Path) -> Path:
         "订单创建、余额支付、确认收货和卖家商品管理等流程。"
     )
     doc.add_paragraph(
-        "第一轮功能扩展后，当前可运行网站采用 7 张运行表：users、categories、products、product_images、"
+        "当前可运行网站采用 12 张运行表：users、admins、categories、products、product_images、"
         "favorites、orders、payments。product_images 保存一个商品的多张图片并支持封面排序；favorites 保存用户收藏关系。"
         "products.image_url 仍保留为兼容缓存，便于旧数据和旧模板平滑过渡。"
     )
@@ -433,8 +433,8 @@ def generate_report(er_path: Path) -> Path:
 
     doc.add_heading("7 总结", level=1)
     doc.add_paragraph(
-        "第一轮扩展后，当前代码版从 5 表主流程提升为 7 表运行结构：独立商品图片表让多图存储更规范，收藏表让个人中心更贴近真实交易平台。"
-        "网站仍保留轻量、可运行、易演示的特点，后续可以继续扩展评价、消息、管理员审核等功能。"
+        "当前代码版从基础交易流程扩展为 12 表运行结构：商品多图、收藏、订单、支付、评价、消息、管理员权限和事件提醒都已落表。"
+        "网站仍保留轻量、可运行、易演示的特点，同时更贴近真实交易平台。"
     )
 
     doc.save(out)
@@ -449,17 +449,17 @@ def generate_instruction() -> Path:
 
     doc.add_heading("1 文件口径", level=1)
     doc.add_paragraph(
-        "本文件夹中的当前代码版材料以实际可运行网站为准。第一轮扩展后，当前运行库为 7 张表，"
+        "本文件夹中的当前代码版材料以实际可运行网站为准。当前运行库为 12 张表，"
         "旧版 10 表材料仍保存在 00_旧版重要参考_勿改 中，只作为扩展设计参考。"
     )
     add_table(
         doc,
         ["文件", "用途"],
         [
-            ["校园二手交易平台数据库课程设计报告.docx", "当前代码版正式报告，说明 7 张运行表和网站功能。"],
+            ["校园二手交易平台数据库课程设计报告.docx", "当前代码版正式报告，说明 12 张运行表和网站功能。"],
             ["校园二手交易平台数据库课程设计答辩PPT.pptx", "8 页当前功能演示版 PPT。"],
             ["校园二手交易平台数据库课程设计答辩PPT_详细版.pptx", "12 页详细答辩版 PPT。"],
-            ["校园二手交易平台ER模型图.png", "当前 7 表 ER 图，可插入报告或 PPT。"],
+            ["校园二手交易平台ER模型图.png", "当前 12 表 ER 图或当前运行 schema，可插入报告或 PPT。"],
             ["../02_当前运行数据库结构/当前网站实际使用_schema.sql", "当前 Flask 网站实际执行的数据库结构文件。"],
         ],
         [7.0, 8.4],
@@ -469,10 +469,10 @@ def generate_instruction() -> Path:
     for text in [
         "先讲现实背景：校园闲置物品流转频繁，微信群交易图片和状态管理不方便。",
         "再讲当前系统：注册登录、浏览筛选、发布多图商品、收藏商品、下单支付、确认收货、卖家管理和个人资料修改。",
-        "展示 ER 图：强调当前实际运行 7 张表，其中 product_images 负责多图，favorites 负责我的收藏。",
+        "展示 ER 图：强调当前实际运行 12 张表，其中 product_images 负责多图，notifications 负责事件提醒。",
         "讲交易状态：商品从 on_sale 到 locked，再到 sold；下架商品为 removed，可重新上架。",
         "讲图片路径：演示图在 static/product_images，用户上传图在 static/uploads，数据库保存 /static/... 访问路径。",
-        "最后讲可扩展：评价、站内消息、管理员审核可以作为后续新增表扩展。",
+        "最后讲可维护性：评价、站内消息、管理员权限、事件提醒已经拆表，后续可继续扩展。",
     ]:
         doc.add_paragraph(text)
 
@@ -494,7 +494,7 @@ def generate_instruction() -> Path:
 
     doc.add_heading("4 提交前检查", level=1)
     for text in [
-        "确认报告、PPT、ER 图都写的是 secondhand 数据库和 7 张运行表。",
+        "确认报告、PPT、ER 图都写的是 secondhand 数据库和 12 张运行表。",
         "不要把旧版 10 张业务表材料误当成当前代码版提交。",
         "如果老师要求演示网站，则以代码/database/schema.sql 和 init_db.py 为准。",
         "用户上传图片在 static/uploads，属于运行数据，不随 GitHub 代码备份。",
@@ -569,7 +569,7 @@ export async function slide01(presentation, ctx) {{
   ctx.addShape(slide, {{ x: 0, y: 500, w: ctx.W, h: 220, fill: "#E8F1ED" }});
   ctx.addText(slide, {{ text: "校园二手交易平台", x: 72, y: 105, w: 760, h: 74, fontSize: 54, color: C.white, bold: true }});
   ctx.addText(slide, {{ text: "数据库设计与实现 · 第一轮扩展版", x: 76, y: 190, w: 720, h: 36, fontSize: 24, color: "#D9E9E5" }});
-  card(slide, ctx, 76, 535, 260, 92, "7 张运行表", "新增 product_images / favorites", C.gold);
+  card(slide, ctx, 76, 535, 260, 92, "12 张运行表", "多图/收藏/提醒/管理员", C.gold);
   card(slide, ctx, 370, 535, 280, 92, "独立多图表", "商品图片可封面排序，旧字段作缓存", C.teal);
   card(slide, ctx, 684, 535, 300, 92, "我的收藏", "详情页收藏，个人中心查看收藏列表", C.gold);
   await ctx.addImage(slide, {{ path: {js(er_js)}, x: 815, y: 82, w: 360, h: 260, fit: "cover", alt: "当前 ER 图缩略图" }});
@@ -591,7 +591,7 @@ export async function slide01(presentation, ctx) {{
 {COMMON_JS}
 export async function slide03(presentation, ctx) {{
   const slide = presentation.slides.add();
-  bg(slide, ctx, "数据库结构从 5 表扩展为当前 7 表", "02 / 数据库口径");
+  bg(slide, ctx, "数据库结构从基础表扩展为当前 12 表", "02 / 数据库口径");
   const data = [
     ["users", "用户、密码摘要、昵称、余额"],
     ["categories", "商品分类，包含其他"],
@@ -648,7 +648,7 @@ export async function slide04(presentation, ctx) {{
     generate_card_slide(8, "答辩收束：当前版本可运行、可演示、可继续扩展", "07 / 总结", [
         ["已经完成", "7 表数据库、独立商品图片表、收藏表、多图上传、余额交易。"],
         ["设计取舍", "保留 image_url 兼容缓存，避免旧数据和模板一次性断裂。"],
-        ["后续扩展", "评价、消息、管理员审核可以作为新增表继续扩展。"],
+        ["后续扩展", "评价、消息、管理员权限和事件提醒已经落表。"],
         ["一句话", "以 secondhand 数据库和当前 schema.sql 为准。"],
     ])
 
@@ -672,7 +672,7 @@ export async function slide04(presentation, ctx) {{
             ["GitHub 备份", "只备份代码，不把 static/uploads 运行图片放进去。"],
         ])
         generate_card_slide(12, "老师追问时的回答口径", "11 / 答辩问答", [
-            ["为什么 7 张表？", "5 表主交易闭环加 product_images 和 favorites，功能与 ER 更完整。"],
+            ["为什么 12 张表？", "交易闭环加多图、收藏、消息、评价、管理员和事件提醒，功能与 ER 更完整。"],
             ["多图为什么还保留 image_url？", "它是兼容缓存，正式多图以 product_images 为准。"],
             ["旧版 10 表还能用吗？", "可以作为扩展设计参考，演示以当前 schema.sql 为准。"],
             ["上传图片在哪里？", "用户上传图在 代码/static/uploads，演示图在 static/product_images。"],
@@ -700,3 +700,5 @@ def generate_all(detailed: bool = True) -> dict:
 if __name__ == "__main__":
     result = generate_all()
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
