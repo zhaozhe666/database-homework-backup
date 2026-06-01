@@ -2,15 +2,15 @@
 {% block title %}注册管理员 · 二手集市{% endblock %}
 {% block content %}
 <div class="auth-box">
-  <h2>注册管理员</h2>
+  <h2>创建管理员</h2>
   <form method="post">
     {{ csrf_field() }}
     <label>账号<input type="text" name="username" required></label>
     <label>密码<input type="password" name="password" required></label>
     <label>昵称<input type="text" name="nickname" required></label>
     <label>手机号<input type="text" name="phone"></label>
-    <button type="submit" class="btn-primary">注册管理员</button>
+    <button type="submit" class="btn-primary">创建管理员</button>
   </form>
-  <p class="auth-switch">已有账号？<a href="{{ url_for('login') }}">去登录</a></p>
+  <p class="auth-switch"><a href="{{ url_for('admin_users') }}">返回用户管理</a></p>
 </div>
 {% endblock %}

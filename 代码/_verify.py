@@ -42,9 +42,9 @@ tables = [r["TABLE_NAME"] for r in db.query_all(
     "SELECT TABLE_NAME FROM information_schema.tables "
     "WHERE TABLE_SCHEMA='secondhand'")]
 print("现有数据表:", sorted(tables))
-for table in ["admins", "product_images", "favorites", "reviews", "messages"]:
+for table in ["admins", "product_images", "favorites", "reviews", "messages", "notifications"]:
     assert table in tables
-for column in ["refund_reason", "refund_requested_at", "refunded_at"]:
+for column in ["refund_reason", "refund_requested_at", "refunded_at", "shipped_at"]:
     assert db.query_one(
         "SELECT COUNT(*) c FROM information_schema.columns "
         "WHERE table_schema='secondhand' AND table_name='orders' AND column_name=%s",
@@ -160,7 +160,12 @@ post("/login", username=seller["username"], password="pass1234")
 post(f"/product/{pid}/restore")
 assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "removed"
 print("卖家查看被管理员下架商品页状态码 =", client.get(f"/product/{pid}").status_code)
+print("普通用户访问管理员创建页状态码 =", client.get("/admin/register").status_code)
+assert client.get("/admin/register").status_code == 403
 client.get("/logout")
+
+print("未登录访问管理员创建页状态码 =", client.get("/admin/register").status_code)
+assert client.get("/admin/register").status_code == 302
 
 post("/login", username=admin["username"], password=admin["password"])
 post(f"/admin/products/{pid}/restore")
@@ -184,6 +189,19 @@ assert db.query_one(
     "SELECT setting_value FROM app_settings WHERE setting_key='admin_registration_enabled'",
 )["setting_value"] == "1"
 print("管理员注册开关打开后页面 =", client.get("/admin/register").status_code)
+created_admin = {
+    "username": f"newadmin{sfx}",
+    "password": "pass1234",
+    "nickname": f"新管理员{sfx}",
+    "phone": f"139{sfx % 100000:05d}5",
+}
+print("已有管理员创建管理员:", post("/admin/register", **created_admin).status_code)
+created_admin_row = db.query_one(
+    "SELECT a.*, u.username FROM admins a JOIN users u ON a.user_id=u.id WHERE u.username=%s",
+    (created_admin["username"],),
+)
+assert created_admin_row
+assert created_admin_row["created_by"] == admin_id
 post("/admin/settings")
 if original_admin_registration_setting == "1":
     post("/admin/settings", admin_registration_enabled="1")
@@ -223,7 +241,7 @@ print("超时订单状态 =", timeout_order["status"],
 assert timeout_order["status"] == "cancelled"
 assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "on_sale"
 
-# 已付款后申请退款，卖家同意后退回买家余额，商品恢复在售。
+# 已付款后申请退款，退款中不能直接确认收货，卖家同意后退回买家余额，商品恢复在售。
 post("/order/create", product_id=str(pid), address="松园3栋")
 refund_oid = latest_order_id(pid)
 post(f"/order/{refund_oid}/pay")
@@ -231,6 +249,9 @@ post(f"/order/{refund_oid}/refund/request", reason="临时不需要了")
 print("申请退款后订单状态 =",
       db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"])
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"] == "refund_requested"
+post(f"/order/{refund_oid}/complete")
+assert db.query_one("SELECT status FROM orders WHERE id=%s", (refund_oid,))["status"] == "refund_requested"
+print("退款申请中禁止直接确认收货 OK")
 
 post("/order/create", product_id=str(cancel_refund_pid), address="松园3栋")
 cancel_refund_oid = latest_order_id(cancel_refund_pid)
@@ -285,6 +306,12 @@ assert db.query_one(
 )["c"] == 1
 print("删除单个对话后保留其他对话 OK")
 print("提醒中心状态码 =", client.get("/me/notifications").status_code)
+pending_shipments = db.query_one(
+    "SELECT COUNT(*) c FROM orders WHERE seller_id=%s AND status='paid'",
+    (seller_id,),
+)["c"]
+print("卖家待发货提醒数量 =", pending_shipments)
+assert pending_shipments >= 1
 post(f"/order/{reject_refund_oid}/refund/reject")
 reject_refund_order = db.query_one(
     "SELECT status, refund_reason, refund_requested_at FROM orders WHERE id=%s",
@@ -311,6 +338,17 @@ post("/order/create", product_id=str(pid), address="松园3栋")
 complete_oid = latest_order_id(pid)
 post(f"/order/{complete_oid}/pay")
 post(f"/order/{complete_oid}/complete")
+assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "paid"
+print("卖家未发货前禁止确认收货 OK")
+client.get("/logout")
+
+post("/login", username=seller["username"], password="pass1234")
+post(f"/order/{complete_oid}/ship")
+assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "shipped"
+client.get("/logout")
+
+post("/login", username=buyer["username"], password="pass1234")
+post(f"/order/{complete_oid}/complete")
 post(f"/order/{complete_oid}/review", rating="5", content="交易顺利，卖家沟通很及时。")
 print("完成订单状态 =",
       db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"],
@@ -320,6 +358,17 @@ print("完成订单状态 =",
       db.query_one("SELECT COUNT(*) c FROM reviews WHERE order_id=%s", (complete_oid,))["c"])
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "completed"
 assert db.query_one("SELECT COUNT(*) c FROM reviews WHERE order_id=%s", (complete_oid,))["c"] == 1
+
+# 退款申请更新必须再次要求 status='paid'，防止完成打款后又被改回退款中。
+with db.get_cursor(commit=True) as cur:
+    cur.execute(
+        "UPDATE orders SET status='refund_requested' WHERE id=%s AND status='paid'",
+        (complete_oid,),
+    )
+    stale_refund_rows = cur.rowcount
+assert stale_refund_rows == 0
+assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "completed"
+print("并发退款尾段防护 OK")
 
 print("首页状态码 =", client.get("/").status_code)
 print("商品详情状态码 =", client.get(f"/product/{pid}").status_code)
@@ -339,4 +388,5 @@ if chinese_upload_url.startswith("/static/"):
         uploaded_path.unlink()
 db.execute("DELETE FROM users WHERE username IN (%s,%s,%s,%s)",
            (buyer["username"], seller["username"], buyer2["username"], admin["username"]))
+db.execute("DELETE FROM users WHERE username=%s", (created_admin["username"],))
 print("清理完成，超时取消、退款、评价和消息全部通过 OK")

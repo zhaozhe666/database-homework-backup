@@ -936,6 +936,7 @@ button, input, textarea, select { font: inherit; }
 .status-refund_requested,
 .status-prod-locked { background: var(--warning); }
 .status-paid { background: var(--blue); }
+.status-shipped { background: #3f8edc; }
 .status-completed,
 .status-prod-on_sale { background: var(--success); }
 .status-cancelled,
@@ -1362,6 +1363,10 @@ button, input, textarea, select { font: inherit; }
 
 .notification-head {
   margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .notification-head p {
@@ -1397,6 +1402,20 @@ button, input, textarea, select { font: inherit; }
   background: #fff7f7;
 }
 
+.notification-item.shipment {
+  border-color: #9cc5f2;
+  background: #f3f8ff;
+}
+
+.notification-item.event.unread {
+  border-color: #9cc5f2;
+  background: #f7fbff;
+}
+
+.notification-item.event.read {
+  opacity: .72;
+}
+
 .notification-dot {
   width: 10px;
   height: 10px;
@@ -1409,6 +1428,10 @@ button, input, textarea, select { font: inherit; }
 .notification-title {
   color: var(--ink);
   font-weight: 900;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .notification-item p {
@@ -1416,10 +1439,34 @@ button, input, textarea, select { font: inherit; }
   color: #4b5563;
 }
 
+.notification-meta {
+  font-size: 13px;
+  color: var(--muted) !important;
+}
+
 .notification-item small {
   display: inline-block;
   margin-top: 8px;
   color: var(--muted);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e8f2ff;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.btn-small {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .message-item {

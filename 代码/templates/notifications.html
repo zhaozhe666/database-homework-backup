@@ -2,11 +2,42 @@
 {% block title %}提醒中心 · 二手集市{% endblock %}
 {% block content %}
 <div class="notification-head">
-  <h2 class="page-title">提醒中心</h2>
+  <div>
+    <h2 class="page-title">提醒中心</h2>
+    <p>事件通知、未读消息和需要处理的订单都会集中在这里。</p>
+  </div>
+  {% if event_notifications %}
+    <form method="post" action="{{ url_for('mark_notifications_read') }}">
+      {{ csrf_field() }}
+      <button class="btn btn-secondary btn-small" type="submit">全部已读</button>
+    </form>
+  {% endif %}
 </div>
 
-{% if unread_conversations or refund_orders %}
+{% if event_notifications or unread_conversations or shipment_orders or refund_orders %}
 <div class="notification-list">
+  {% for notice in event_notifications %}
+    {% set notice_url = url_for('order_detail', oid=notice.order_id) if notice.order_id else (url_for('product_detail', pid=notice.product_id) if notice.product_id else '#') %}
+    <a class="notification-item event {% if notice.is_read %}read{% else %}unread{% endif %}" href="{{ notice_url }}">
+      <span class="notification-dot"></span>
+      <div>
+        <div class="notification-title">
+          {{ notice.title }}
+          {% if not notice.is_read %}<span class="status-pill">未读</span>{% endif %}
+        </div>
+        {% if notice.content %}<p>{{ notice.content }}</p>{% endif %}
+        {% if notice.order_no or notice.product_title %}
+          <p class="notification-meta">
+            {% if notice.order_no %}订单 {{ notice.order_no }}{% endif %}
+            {% if notice.order_no and notice.product_title %} · {% endif %}
+            {% if notice.product_title %}{{ notice.product_title }}{% endif %}
+          </p>
+        {% endif %}
+        <small>{{ notice.created_at }}</small>
+      </div>
+    </a>
+  {% endfor %}
+
   {% for conversation in unread_conversations %}
     <a class="notification-item unread" href="{{ url_for('my_messages', with_user=conversation.other_user_id) }}">
       <span class="notification-dot"></span>
@@ -21,11 +52,22 @@
     </a>
   {% endfor %}
 
+  {% for order in shipment_orders %}
+    <a class="notification-item shipment" href="{{ url_for('order_detail', oid=order.id) }}">
+      <span class="notification-dot"></span>
+      <div>
+        <div class="notification-title">待处理：{{ order.buyer_name }} 已付款，等待发货</div>
+        <p>订单《{{ order.title }}》金额 ¥{{ '%.2f'|format(order.amount) }}，请进入订单点击“已发货”。</p>
+        <small>{{ order.paid_at or order.created_at }}</small>
+      </div>
+    </a>
+  {% endfor %}
+
   {% for order in refund_orders %}
     <a class="notification-item urgent" href="{{ url_for('order_detail', oid=order.id) }}">
       <span class="notification-dot"></span>
       <div>
-        <div class="notification-title">{{ order.buyer_name }} 申请退款</div>
+        <div class="notification-title">待处理：{{ order.buyer_name }} 申请退款</div>
         <p>订单《{{ order.title }}》等待你处理，金额 ¥{{ '%.2f'|format(order.amount) }}。</p>
         {% if order.refund_reason %}<p>原因：{{ order.refund_reason }}</p>{% endif %}
         <small>{{ order.refund_requested_at or order.created_at }}</small>

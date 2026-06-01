@@ -3,11 +3,11 @@
 
 当前功能覆盖：
     注册/登录、个人资料与密码修改、商品发布与多图上传、收藏、站内消息、
-    10 分钟待支付倒计时、余额支付、退款、确认收货、评价，以及管理员后台。
+    10 分钟待支付倒计时、余额支付、卖家发货、退款、确认收货、评价，以及管理员后台。
 
 核心交易闭环：
     发布/浏览商品 -> 下单(锁定商品) -> 余额支付(平台托管)
-    -> 确认收货(打款给卖家) -> 买卖双方评价 -> 交易完成
+    -> 卖家发货 -> 确认收货(打款给卖家) -> 买卖双方评价 -> 交易完成
 """
 
 import functools
@@ -41,6 +41,11 @@ RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FIELD_NAME = "_csrf_token"
+EXPIRED_ORDER_REFRESH_ENDPOINTS = {
+    "index", "product_detail", "order_detail",
+    "admin_dashboard", "admin_orders",
+    "my_selling", "my_favorites", "my_bought", "my_sold",
+}
 
 # 状态中文映射，供模板显示
 PRODUCT_STATUS = {
@@ -56,7 +61,8 @@ ADMIN_PERMISSIONS = {
 }
 ORDER_STATUS = {
     "created": "待支付",
-    "paid": "待收货",
+    "paid": "待发货",
+    "shipped": "待收货",
     "refund_requested": "退款申请中",
     "refunded": "已退款",
     "completed": "已完成",
@@ -120,21 +126,43 @@ def active_admin_count(permission=None):
 
 
 def notification_summary(user_id):
-    """返回全局提醒数量：未读消息 + 待卖家处理的退款申请。"""
+    """返回全局提醒数量：未读消息 + 未读事件 + 待卖家处理的退款/发货订单。"""
     unread_messages = query_one(
         "SELECT COUNT(*) AS c FROM messages "
         "WHERE receiver_id=%s AND is_read=0 AND receiver_deleted=0",
+        (user_id,),
+    )["c"]
+    unread_notifications = query_one(
+        "SELECT COUNT(*) AS c FROM notifications WHERE user_id=%s AND is_read=0",
         (user_id,),
     )["c"]
     refund_requests = query_one(
         "SELECT COUNT(*) AS c FROM orders WHERE seller_id=%s AND status='refund_requested'",
         (user_id,),
     )["c"]
+    pending_shipments = query_one(
+        "SELECT COUNT(*) AS c FROM orders WHERE seller_id=%s AND status='paid'",
+        (user_id,),
+    )["c"]
     return {
         "unread_messages": unread_messages,
+        "unread_notifications": unread_notifications,
         "refund_requests": refund_requests,
-        "total": unread_messages + refund_requests,
+        "pending_shipments": pending_shipments,
+        "total": unread_messages + unread_notifications + refund_requests + pending_shipments,
     }
+
+
+def add_notification(cur, user_id, notice_type, title, content=None, order_id=None, product_id=None, actor_id=None):
+    """写入站内事件提醒。调用方在同一事务内提交。"""
+    if not user_id:
+        return
+    cur.execute(
+        "INSERT INTO notifications "
+        "(user_id, actor_id, order_id, product_id, notice_type, title, content) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (user_id, actor_id, order_id, product_id, notice_type, title, content),
+    )
 
 
 def csrf_token():
@@ -474,17 +502,26 @@ def drop_column_if_exists(cur, table_name, column_name):
 def sync_order_schema(cur):
     cur.execute(
         "ALTER TABLE orders MODIFY status "
-        "ENUM('created','paid','refund_requested','refunded','completed','cancelled') "
+        "ENUM('created','paid','shipped','refund_requested','refunded','completed','cancelled') "
         "NOT NULL DEFAULT 'created'"
     )
     add_column_if_missing(cur, "orders", "refund_reason", "VARCHAR(255) DEFAULT NULL COMMENT '退款原因'")
     add_column_if_missing(cur, "orders", "refund_requested_at", "DATETIME DEFAULT NULL")
     add_column_if_missing(cur, "orders", "refunded_at", "DATETIME DEFAULT NULL")
+    add_column_if_missing(cur, "orders", "shipped_at", "DATETIME DEFAULT NULL")
 
 
 def cancel_expired_unpaid_orders():
     """把超过付款时限的待支付订单自动取消，并释放商品。"""
     with get_cursor(commit=True) as cur:
+        cur.execute(
+            "SELECT o.*, p.title "
+            "FROM orders o JOIN products p ON p.id = o.product_id "
+            "WHERE o.status='created' "
+            "AND o.created_at <= DATE_SUB(NOW(), INTERVAL %s MINUTE)",
+            (ORDER_PAYMENT_TIMEOUT_MINUTES,),
+        )
+        expired_orders = cur.fetchall()
         cur.execute(
             "UPDATE orders o JOIN products p ON p.id = o.product_id "
             "SET o.status='cancelled', o.cancelled_at=NOW(), p.status='on_sale' "
@@ -492,6 +529,26 @@ def cancel_expired_unpaid_orders():
             "AND o.created_at <= DATE_SUB(NOW(), INTERVAL %s MINUTE)",
             (ORDER_PAYMENT_TIMEOUT_MINUTES,),
         )
+        for order in expired_orders:
+            add_notification(
+                cur,
+                order["buyer_id"],
+                "order_timeout_cancelled",
+                "订单已超时取消",
+                "订单 %s 超过 %d 分钟未付款，系统已自动取消。"
+                % (order["order_no"], ORDER_PAYMENT_TIMEOUT_MINUTES),
+                order_id=order["id"],
+                product_id=order["product_id"],
+            )
+            add_notification(
+                cur,
+                order["seller_id"],
+                "order_timeout_cancelled",
+                "待付款订单已超时取消",
+                "商品《%s》的待付款订单已超时取消，商品已恢复在售。" % order["title"],
+                order_id=order["id"],
+                product_id=order["product_id"],
+            )
 
 
 def ensure_runtime_schema():
@@ -649,6 +706,34 @@ def ensure_runtime_schema():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              user_id INT UNSIGNED NOT NULL,
+              actor_id INT UNSIGNED DEFAULT NULL,
+              order_id INT UNSIGNED DEFAULT NULL,
+              product_id INT UNSIGNED DEFAULT NULL,
+              notice_type VARCHAR(40) NOT NULL,
+              title VARCHAR(120) NOT NULL,
+              content VARCHAR(500) DEFAULT NULL,
+              is_read TINYINT(1) NOT NULL DEFAULT 0,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              KEY idx_notifications_user_read (user_id, is_read, created_at),
+              KEY idx_notifications_order (order_id),
+              KEY idx_notifications_product (product_id),
+              CONSTRAINT fk_notification_user
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              CONSTRAINT fk_notification_actor
+                FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL,
+              CONSTRAINT fk_notification_order
+                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+              CONSTRAINT fk_notification_product
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
         add_column_if_missing(cur, "messages", "sender_deleted", "TINYINT(1) NOT NULL DEFAULT 0")
         add_column_if_missing(cur, "messages", "receiver_deleted", "TINYINT(1) NOT NULL DEFAULT 0")
         cur.execute(
@@ -670,7 +755,8 @@ def ensure_runtime_schema():
 def prepare_runtime_schema():
     validate_csrf_token()
     ensure_runtime_schema()
-    cancel_expired_unpaid_orders()
+    if request.endpoint in EXPIRED_ORDER_REFRESH_ENDPOINTS:
+        cancel_expired_unpaid_orders()
 
 
 # --------------------------------------------------------------------- #
@@ -1019,6 +1105,15 @@ def admin_remove_product(pid):
             "removed_by=%s, removed_at=NOW() WHERE id=%s",
             (reason, session["user_id"], pid),
         )
+        add_notification(
+            cur,
+            product["seller_id"],
+            "product_removed_by_admin",
+            "你的商品已被管理员下架",
+            "商品《%s》被管理员下架。原因：%s" % (product["title"], reason),
+            product_id=pid,
+            actor_id=session["user_id"],
+        )
     flash("商品已由管理员下架", "success")
     return redirect(url_for("admin_products"))
 
@@ -1038,6 +1133,15 @@ def admin_restore_product(pid):
             "UPDATE products SET status='on_sale', removal_reason=NULL, "
             "removed_by=NULL, removed_at=NULL WHERE id=%s",
             (pid,),
+        )
+        add_notification(
+            cur,
+            product["seller_id"],
+            "product_restored_by_admin",
+            "你的商品已恢复上架",
+            "商品《%s》已由管理员恢复上架。" % product["title"],
+            product_id=pid,
+            actor_id=session["user_id"],
         )
     flash("商品已恢复上架", "success")
     return redirect(url_for("admin_products"))
@@ -1126,6 +1230,15 @@ def admin_update_user_permissions(uid):
             )
         else:
             cur.execute("DELETE FROM admins WHERE user_id=%s", (uid,))
+        add_notification(
+            cur,
+            uid,
+            "admin_permissions_updated",
+            "你的管理员权限已更新",
+            "当前账号%s管理员权限。"
+            % ("已获得或更新" if make_admin else "已取消"),
+            actor_id=session["user_id"],
+        )
     flash("管理员权限已更新", "success")
     return redirect(url_for("admin_users"))
 
@@ -1151,6 +1264,14 @@ def admin_toggle_user_status(uid):
     new_status = 0 if user.get("is_active", 1) else 1
     with get_cursor(commit=True) as cur:
         cur.execute("UPDATE users SET is_active=%s WHERE id=%s", (new_status, uid))
+        add_notification(
+            cur,
+            uid,
+            "account_status_updated",
+            "你的账号状态已更新",
+            "你的账号已被%s。" % ("启用" if new_status else "停用"),
+            actor_id=session["user_id"],
+        )
     flash("账号状态已更新", "success")
     return redirect(url_for("admin_users"))
 
@@ -1175,10 +1296,11 @@ def admin_settings():
 
 
 @app.route("/admin/register", methods=["GET", "POST"])
+@admin_required("can_manage_admin_register")
 def admin_register():
     if not admin_registration_enabled():
         flash("管理员注册入口已关闭", "warning")
-        return redirect(url_for("register"))
+        return redirect(url_for("admin_settings"))
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -1199,14 +1321,23 @@ def admin_register():
                 "VALUES (%s, %s, %s, %s)",
                 (username, generate_password_hash(password), nickname, phone or None),
             )
+            new_user_id = cur.lastrowid
             cur.execute(
                 "INSERT INTO admins "
-                "(user_id, can_manage_products, can_manage_users, can_manage_admin_register) "
-                "VALUES (%s, 1, 1, 1)",
-                (cur.lastrowid,),
+                "(user_id, can_manage_products, can_manage_users, can_manage_admin_register, created_by) "
+                "VALUES (%s, 1, 1, 1, %s)",
+                (new_user_id, session["user_id"]),
             )
-        flash("管理员注册成功，请登录", "success")
-        return redirect(url_for("login"))
+            add_notification(
+                cur,
+                new_user_id,
+                "admin_account_created",
+                "管理员账号已创建",
+                "你的账号已被创建为管理员账号，首次登录后请及时修改资料。",
+                actor_id=session["user_id"],
+            )
+        flash("管理员账号创建成功", "success")
+        return redirect(url_for("admin_users"))
     return render_template("admin_register.html")
 
 
@@ -1404,6 +1535,16 @@ def create_order():
                 (order_no, pid, buyer_id, product["seller_id"], product["price"], address or None),
             )
             order_id = cur.lastrowid
+            add_notification(
+                cur,
+                product["seller_id"],
+                "order_created",
+                "有人下单，等待付款",
+                "你的商品《%s》已被买家下单，付款前商品会暂时锁定。" % product["title"],
+                order_id=order_id,
+                product_id=pid,
+                actor_id=buyer_id,
+            )
         flash("下单成功，请尽快支付", "success")
         return redirect(url_for("order_detail", oid=order_id))
     except Exception:
@@ -1480,6 +1621,25 @@ def pay_order(oid):
                     "UPDATE orders SET status='cancelled', cancelled_at=NOW() WHERE id=%s",
                     (oid,),
                 )
+                add_notification(
+                    cur,
+                    order["buyer_id"],
+                    "order_timeout_cancelled",
+                    "订单已超时取消",
+                    "订单 %s 超过 %d 分钟未付款，系统已自动取消。"
+                    % (order["order_no"], ORDER_PAYMENT_TIMEOUT_MINUTES),
+                    order_id=oid,
+                    product_id=order["product_id"],
+                )
+                add_notification(
+                    cur,
+                    order["seller_id"],
+                    "order_timeout_cancelled",
+                    "待付款订单已超时取消",
+                    "订单 %s 已超时取消，商品已恢复在售。" % order["order_no"],
+                    order_id=oid,
+                    product_id=order["product_id"],
+                )
                 flash("订单超过 10 分钟未付款，已自动取消", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
@@ -1503,7 +1663,26 @@ def pay_order(oid):
                 "VALUES (%s, %s, 'balance', 'success')",
                 (oid, order["amount"]),
             )
-        flash("支付成功，等待卖家发货 / 确认收货后完成交易", "success")
+            add_notification(
+                cur,
+                order["seller_id"],
+                "order_paid",
+                "买家已付款，等待发货",
+                "订单 %s 已支付成功，请及时发货。" % order["order_no"],
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=buyer_id,
+            )
+            add_notification(
+                cur,
+                buyer_id,
+                "order_paid",
+                "支付成功，等待卖家发货",
+                "订单 %s 已支付成功，卖家发货后会继续提醒你。" % order["order_no"],
+                order_id=oid,
+                product_id=order["product_id"],
+            )
+        flash("支付成功，等待卖家发货", "success")
     except Exception:
         flash("支付失败，请重试", "danger")
     return redirect(url_for("order_detail", oid=oid))
@@ -1522,8 +1701,8 @@ def complete_order(oid):
                 return redirect(url_for("index"))
             if order["buyer_id"] != buyer_id:
                 abort(403)
-            if order["status"] not in ("paid", "refund_requested"):
-                flash("订单状态不支持确认收货", "warning")
+            if order["status"] != "shipped":
+                flash("卖家发货后才能确认收货", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
             # 打款给卖家 + 商品标记售出 + 订单完成
@@ -1537,9 +1716,60 @@ def complete_order(oid):
                 "refund_reason=NULL, refund_requested_at=NULL WHERE id=%s",
                 (oid,),
             )
+            add_notification(
+                cur,
+                order["seller_id"],
+                "order_completed",
+                "买家已确认收货",
+                "订单 %s 已完成，货款已转入你的余额。" % order["order_no"],
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=buyer_id,
+            )
         flash("确认收货成功，交易完成", "success")
     except Exception:
         flash("操作失败，请重试", "danger")
+    return redirect(url_for("order_detail", oid=oid))
+
+
+@app.route("/order/<int:oid>/ship", methods=["POST"])
+@login_required
+def ship_order(oid):
+    seller_id = session["user_id"]
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
+            order = cur.fetchone()
+            if not order:
+                flash("订单不存在", "danger")
+                return redirect(url_for("index"))
+            if order["seller_id"] != seller_id:
+                abort(403)
+            if order["status"] != "paid":
+                flash("只有已付款待发货订单可以标记发货", "warning")
+                return redirect(url_for("order_detail", oid=oid))
+
+            cur.execute(
+                "UPDATE orders SET status='shipped', shipped_at=NOW() "
+                "WHERE id=%s AND status='paid'",
+                (oid,),
+            )
+            if cur.rowcount != 1:
+                flash("订单状态已变化，请刷新后重试", "warning")
+                return redirect(url_for("order_detail", oid=oid))
+            add_notification(
+                cur,
+                order["buyer_id"],
+                "order_shipped",
+                "卖家已发货",
+                "订单 %s 已发货，请收到商品后及时确认收货。" % order["order_no"],
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=seller_id,
+            )
+        flash("已标记发货，等待买家确认收货", "success")
+    except Exception:
+        flash("发货操作失败，请重试", "danger")
     return redirect(url_for("order_detail", oid=oid))
 
 
@@ -1552,20 +1782,34 @@ def request_refund(oid):
         flash("退款原因最多 255 字", "danger")
         return redirect(url_for("order_detail", oid=oid))
 
-    order = query_one("SELECT * FROM orders WHERE id=%s", (oid,))
-    if not order:
-        abort(404)
-    if order["buyer_id"] != buyer_id:
-        abort(403)
-    if order["status"] != "paid":
-        flash("只有已付款且未确认收货的订单可以申请退款", "warning")
-        return redirect(url_for("order_detail", oid=oid))
-
     with get_cursor(commit=True) as cur:
+        cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
+        order = cur.fetchone()
+        if not order:
+            abort(404)
+        if order["buyer_id"] != buyer_id:
+            abort(403)
+        if order["status"] not in ("paid", "shipped"):
+            flash("只有已付款且未确认收货的订单可以申请退款", "warning")
+            return redirect(url_for("order_detail", oid=oid))
+
         cur.execute(
             "UPDATE orders SET status='refund_requested', refund_reason=%s, "
-            "refund_requested_at=NOW() WHERE id=%s",
+            "refund_requested_at=NOW() WHERE id=%s AND status IN ('paid','shipped')",
             (reason or None, oid),
+        )
+        if cur.rowcount != 1:
+            flash("订单状态已变化，请刷新后重试", "warning")
+            return redirect(url_for("order_detail", oid=oid))
+        add_notification(
+            cur,
+            order["seller_id"],
+            "refund_requested",
+            "买家申请退款",
+            "订单 %s 收到退款申请，请及时处理。" % order["order_no"],
+            order_id=oid,
+            product_id=order["product_id"],
+            actor_id=buyer_id,
         )
     flash("退款申请已提交，等待卖家同意", "success")
     return redirect(url_for("order_detail", oid=oid))
@@ -1597,6 +1841,16 @@ def approve_refund(oid):
                 "UPDATE orders SET status='refunded', refunded_at=NOW() WHERE id=%s",
                 (oid,),
             )
+            add_notification(
+                cur,
+                order["buyer_id"],
+                "refund_approved",
+                "退款已同意",
+                "订单 %s 的退款已同意，金额已退回你的余额。" % order["order_no"],
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=seller_id,
+            )
         flash("退款已同意，金额已退回买家余额", "success")
     except Exception:
         flash("退款处理失败，请重试", "danger")
@@ -1620,12 +1874,24 @@ def reject_refund(oid):
                 flash("当前订单没有待处理的退款申请", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            resume_status = "shipped" if order.get("shipped_at") else "paid"
             cur.execute(
-                "UPDATE orders SET status='paid', refund_reason=NULL, "
+                "UPDATE orders SET status=%s, refund_reason=NULL, "
                 "refund_requested_at=NULL WHERE id=%s",
-                (oid,),
+                (resume_status, oid),
             )
-        flash("已拒绝退款，订单恢复为待收货", "info")
+            add_notification(
+                cur,
+                order["buyer_id"],
+                "refund_rejected",
+                "退款申请被拒绝",
+                "订单 %s 的退款申请被卖家拒绝，订单已恢复为%s。"
+                % (order["order_no"], ORDER_STATUS.get(resume_status, resume_status)),
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=seller_id,
+            )
+        flash("已拒绝退款，订单恢复到原交易状态", "info")
     except Exception:
         flash("退款处理失败，请重试", "danger")
     return redirect(url_for("order_detail", oid=oid))
@@ -1648,12 +1914,24 @@ def cancel_refund_request(oid):
                 flash("当前订单没有待撤回的退款申请", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
+            resume_status = "shipped" if order.get("shipped_at") else "paid"
             cur.execute(
-                "UPDATE orders SET status='paid', refund_reason=NULL, "
+                "UPDATE orders SET status=%s, refund_reason=NULL, "
                 "refund_requested_at=NULL WHERE id=%s",
-                (oid,),
+                (resume_status, oid),
             )
-        flash("退款申请已撤回，订单恢复为待收货", "info")
+            add_notification(
+                cur,
+                order["seller_id"],
+                "refund_cancelled",
+                "买家撤回退款申请",
+                "订单 %s 的退款申请已由买家撤回，订单已恢复为%s。"
+                % (order["order_no"], ORDER_STATUS.get(resume_status, resume_status)),
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=buyer_id,
+            )
+        flash("退款申请已撤回，订单恢复到原交易状态", "info")
     except Exception:
         flash("撤回退款失败，请重试", "danger")
     return redirect(url_for("order_detail", oid=oid))
@@ -1691,6 +1969,17 @@ def review_order(oid):
             "VALUES (%s, %s, %s, %s, %s)",
             (oid, uid, target_user_id, rating, content or None),
         )
+        add_notification(
+            cur,
+            target_user_id,
+            "review_received",
+            "你收到了一条新评价",
+            "订单 %s 收到 %d 星评价%s。"
+            % (order["order_no"], rating, "：" + content if content else ""),
+            order_id=oid,
+            product_id=order["product_id"],
+            actor_id=uid,
+        )
     flash("评价已提交", "success")
     return redirect(url_for("order_detail", oid=oid))
 
@@ -1716,6 +2005,18 @@ def cancel_order(oid):
             cur.execute("UPDATE products SET status='on_sale' WHERE id=%s", (order["product_id"],))
             cur.execute(
                 "UPDATE orders SET status='cancelled', cancelled_at=NOW() WHERE id=%s", (oid,)
+            )
+            other_id = order["seller_id"] if uid == order["buyer_id"] else order["buyer_id"]
+            add_notification(
+                cur,
+                other_id,
+                "order_cancelled",
+                "订单已取消",
+                "订单 %s 已由%s取消，商品已恢复在售。"
+                % (order["order_no"], "买家" if uid == order["buyer_id"] else "卖家"),
+                order_id=oid,
+                product_id=order["product_id"],
+                actor_id=uid,
             )
         flash("订单已取消", "info")
     except Exception:
@@ -1874,6 +2175,24 @@ def my_messages():
 def my_notifications():
     uid = session["user_id"]
     unread_conversations = build_unread_message_conversations(uid)
+    event_notifications = query_all(
+        "SELECT n.*, p.title AS product_title, o.order_no "
+        "FROM notifications n "
+        "LEFT JOIN products p ON n.product_id = p.id "
+        "LEFT JOIN orders o ON n.order_id = o.id "
+        "WHERE n.user_id=%s "
+        "ORDER BY n.is_read ASC, n.created_at DESC LIMIT 50",
+        (uid,),
+    )
+    shipment_orders = query_all(
+        "SELECT o.*, p.title, bu.nickname AS buyer_name "
+        "FROM orders o "
+        "JOIN products p ON o.product_id = p.id "
+        "JOIN users bu ON o.buyer_id = bu.id "
+        "WHERE o.seller_id=%s AND o.status='paid' "
+        "ORDER BY o.paid_at DESC, o.created_at DESC LIMIT 20",
+        (uid,),
+    )
     refund_orders = query_all(
         "SELECT o.*, p.title, bu.nickname AS buyer_name "
         "FROM orders o "
@@ -1885,9 +2204,21 @@ def my_notifications():
     )
     return render_template(
         "notifications.html",
+        event_notifications=event_notifications,
         unread_conversations=unread_conversations,
+        shipment_orders=shipment_orders,
         refund_orders=refund_orders,
     )
+
+
+@app.route("/me/notifications/read-all", methods=["POST"])
+@login_required
+def mark_notifications_read():
+    uid = session["user_id"]
+    with get_cursor(commit=True) as cur:
+        cur.execute("UPDATE notifications SET is_read=1 WHERE user_id=%s AND is_read=0", (uid,))
+    flash("事件提醒已全部标为已读", "success")
+    return redirect(url_for("my_notifications"))
 
 
 @app.route("/message/<int:mid>/reply", methods=["POST"])

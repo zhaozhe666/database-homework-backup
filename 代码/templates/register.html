@@ -12,8 +12,5 @@
     <button type="submit" class="btn-primary">注册</button>
   </form>
   <p class="auth-switch">已有账号？<a href="{{ url_for('login') }}">去登录</a></p>
-  {% if admin_registration_enabled %}
-    <p class="auth-switch">管理员入口已开放：<a href="{{ url_for('admin_register') }}">注册管理员</a></p>
-  {% endif %}
 </div>
 {% endblock %}

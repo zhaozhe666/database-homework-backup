@@ -25,13 +25,14 @@
     <li><b>订单号：</b>{{ order.order_no }}</li>
     <li><b>买家：</b>{{ order.buyer_name }}</li>
     <li><b>卖家：</b>{{ order.seller_name }}</li>
-    {% if order.status in ('paid','refund_requested','refunded','completed') %}
+    {% if order.status in ('paid','shipped','refund_requested','refunded','completed') %}
       <li><b>卖家联系方式：</b>{{ order.seller_phone or '未填写' }}</li>
     {% endif %}
     <li><b>收货地址：</b>{{ order.address or '未填写' }}</li>
     <li><b>下单时间：</b>{{ order.created_at }}</li>
     {% if payment_deadline %}<li><b>付款截止：</b>{{ payment_deadline }}</li>{% endif %}
     {% if order.paid_at %}<li><b>支付时间：</b>{{ order.paid_at }}</li>{% endif %}
+    {% if order.shipped_at %}<li><b>发货时间：</b>{{ order.shipped_at }}</li>{% endif %}
     {% if order.refund_requested_at %}<li><b>申请退款：</b>{{ order.refund_requested_at }}</li>{% endif %}
     {% if order.refunded_at %}<li><b>退款时间：</b>{{ order.refunded_at }}</li>{% endif %}
     {% if order.completed_at %}<li><b>完成时间：</b>{{ order.completed_at }}</li>{% endif %}
@@ -55,7 +56,7 @@
       <p class="own-tip">请在 10 分钟内付款，超时订单会自动取消。</p>
       <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
-        <button class="btn-primary" data-pay-submit>余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
+        <button class="btn-primary" data-pay-submit onclick="return confirm('确定使用余额支付这笔订单吗？');">余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
       </form>
     {% endif %}
     {% if order.status == 'created' and (is_buyer or is_seller) %}
@@ -65,38 +66,48 @@
       </form>
     {% endif %}
     {% if order.status == 'paid' and is_buyer %}
+      <form action="{{ url_for('request_refund', oid=order.id) }}" method="post" class="refund-form">
+        {{ csrf_field() }}
+        <input type="text" name="reason" maxlength="255" placeholder="申请退款原因（选填）">
+        <button class="btn-outline" type="submit" onclick="return confirm('确定申请退款吗？提交后需要卖家处理。');">申请退款</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'paid' and is_seller %}
+      <p class="own-tip">买家已付款（平台托管中），请发货后点击已发货。</p>
+      <form action="{{ url_for('ship_order', oid=order.id) }}" method="post" style="display:inline">
+        {{ csrf_field() }}
+        <button class="btn-primary" onclick="return confirm('确定已经发货了吗？');">已发货</button>
+      </form>
+    {% endif %}
+    {% if order.status == 'shipped' and is_buyer %}
       <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
-        <button class="btn-primary">确认收货</button>
+        <button class="btn-primary" onclick="return confirm('确定已经收到商品并确认收货吗？确认后款项会打给卖家。');">确认收货</button>
       </form>
       <form action="{{ url_for('request_refund', oid=order.id) }}" method="post" class="refund-form">
         {{ csrf_field() }}
         <input type="text" name="reason" maxlength="255" placeholder="申请退款原因（选填）">
-        <button class="btn-outline" type="submit">申请退款</button>
+        <button class="btn-outline" type="submit" onclick="return confirm('确定申请退款吗？提交后需要卖家处理。');">申请退款</button>
       </form>
     {% endif %}
-    {% if order.status == 'paid' and is_seller %}
-      <p class="own-tip">买家已付款（平台托管中），请尽快发货，待买家确认收货后到账。</p>
+    {% if order.status == 'shipped' and is_seller %}
+      <p class="own-tip">已标记发货，等待买家确认收货后到账。</p>
     {% endif %}
     {% if order.status == 'refund_requested' and is_buyer %}
-      <p class="own-tip">退款申请已提交，等待卖家处理；你也可以撤回申请或确认收货。</p>
-      <form action="{{ url_for('complete_order', oid=order.id) }}" method="post" style="display:inline">
-        {{ csrf_field() }}
-        <button class="btn-primary">确认收货</button>
-      </form>
+      <p class="own-tip">退款申请已提交，等待卖家处理；如需确认收货，请先撤回退款申请。</p>
       <form action="{{ url_for('cancel_refund_request', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
-        <button class="btn-outline">撤回退款申请</button>
+        <button class="btn-outline" onclick="return confirm('确定撤回退款申请吗？');">撤回退款申请</button>
       </form>
     {% endif %}
     {% if order.status == 'refund_requested' and is_seller %}
       <form action="{{ url_for('approve_refund', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
-        <button class="btn-primary">同意退款</button>
+        <button class="btn-primary" onclick="return confirm('确定同意退款吗？金额会退回买家余额。');">同意退款</button>
       </form>
       <form action="{{ url_for('reject_refund', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
-        <button class="btn-outline">拒绝退款</button>
+        <button class="btn-outline" onclick="return confirm('确定拒绝退款吗？订单会恢复到原交易状态。');">拒绝退款</button>
       </form>
     {% endif %}
     {% if order.status == 'refunded' %}

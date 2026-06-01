@@ -80,6 +80,21 @@ def seed_data():
         ("bob", "其他", "宿舍折叠小桌板",
          "适合床上看书和放电脑，桌腿稳，桌面有轻微使用痕迹。", 28.00, "9成新",
          "/static/product_images/dorm-desk.jpg"),
+        ("alice", "数码电子", "头戴式无线降噪耳机",
+         "银色头戴式耳机，降噪和蓝牙连接正常，适合自习室和通勤使用。", 180.00, "9成新",
+         "/static/product_images/wireless-headphones.jpg"),
+        ("bob", "数码电子", "87键机械键盘 茶轴",
+         "黑色小配列键盘，键帽无明显打油，适合宿舍桌面和编程作业。", 120.00, "9成新",
+         "/static/product_images/mechanical-keyboard.jpg"),
+        ("carol", "生活家居", "宿舍小容量电热水壶",
+         "1L 左右容量，烧水正常，壶身干净，搬宿舍闲置出。", 55.00, "8成新",
+         "/static/product_images/dorm-kettle.jpg"),
+        ("alice", "图书教材", "大学英语六级真题资料",
+         "近几年真题加词汇资料，附便签标注，备考六级够用。", 30.00, "9成新",
+         "/static/product_images/cet6-books.jpg"),
+        ("carol", "服饰鞋包", "深蓝色上课双肩包",
+         "容量够放电脑和教材，肩带完好，外观干净，适合日常上课。", 68.00, "9成新",
+         "/static/product_images/navy-backpack.jpg"),
     ]
 
     conn = get_connection()

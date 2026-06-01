@@ -16,7 +16,17 @@
     <td>¥{{ '%.2f'|format(o.amount) }}</td>
     <td><span class="status status-{{ o.status }}">{{ ORDER_STATUS[o.status] }}</span></td>
     <td>{{ o.created_at }}</td>
-    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a></td>
+    <td>
+      <div class="row-actions">
+        <a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a>
+        {% if role == 'seller' and o.status == 'paid' %}
+          <form action="{{ url_for('ship_order', oid=o.id) }}" method="post">
+            {{ csrf_field() }}
+            <button class="btn-outline btn-success btn-xs" type="submit" onclick="return confirm('确定已经发货了吗？');">已发货</button>
+          </form>
+        {% endif %}
+      </div>
+    </td>
   </tr>
   {% endfor %}
 </table>
