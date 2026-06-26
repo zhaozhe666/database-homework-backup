@@ -702,13 +702,28 @@ button, input, textarea, select { font: inherit; }
   font-size: 13px;
 }
 
-.flashes { margin-bottom: 16px; }
+.flashes { margin-bottom: 20px; }
 .flash {
-  padding: 11px 14px;
-  margin-bottom: 8px;
+  position: relative;
+  padding: 15px 18px 15px 46px;
+  margin-bottom: 10px;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(25, 33, 52, .06);
+}
+
+.flash::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-50%);
 }
 
 .flash-success { background: #e9f8ee; border-color: #c9edd5; color: var(--success); }
@@ -1042,6 +1057,54 @@ button, input, textarea, select { font: inherit; }
 
 .collapsible-form[hidden] {
   display: none;
+}
+
+.report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .45);
+}
+
+.report-modal[hidden] {
+  display: none;
+}
+
+.report-modal-card {
+  width: min(420px, 100%);
+  padding: 30px 28px 26px;
+  text-align: center;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, .22);
+}
+
+.report-modal-mark {
+  width: 54px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: #fff;
+  background: var(--success);
+  border-radius: 50%;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.report-modal-card h2 {
+  margin-bottom: 8px;
+  font-size: 24px;
+}
+
+.report-modal-card p {
+  margin-bottom: 20px;
+  color: #4b5563;
+  line-height: 1.8;
 }
 
 .message-form textarea,

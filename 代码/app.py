@@ -1124,8 +1124,8 @@ def send_product_message(pid):
             "VALUES (%s, %s, %s, %s)",
             (session["user_id"], product["seller_id"], pid, content),
         )
-    flash("消息已发送给卖家", "success")
-    return redirect(url_for("product_detail", pid=pid))
+    flash("消息已发送，已进入与卖家的对话", "success")
+    return redirect(url_for("my_messages", with_user=product["seller_id"]))
 
 
 # --------------------------------------------------------------------- #
@@ -1153,8 +1153,7 @@ def report_product(pid):
             "VALUES (%s, %s, %s)",
             (pid, session["user_id"], reason),
         )
-    flash("举报已提交，管理员会在后台核实处理", "success")
-    return redirect(url_for("product_detail", pid=pid))
+    return redirect(url_for("product_detail", pid=pid, reported=1))
 
 
 @app.route("/register", methods=["GET", "POST"])

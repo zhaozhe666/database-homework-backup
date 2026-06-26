@@ -125,6 +125,17 @@
 </section>
 {% endif %}
 
+{% if request.args.get('reported') == '1' %}
+<div class="report-modal" data-report-modal role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+  <div class="report-modal-card">
+    <div class="report-modal-mark">✓</div>
+    <h2 id="report-modal-title">感谢你的举报</h2>
+    <p>举报已提交，管理员会在后台核实处理。处理结果会结合商品信息、举报原因和平台规则判断。</p>
+    <button type="button" class="btn-primary" data-report-modal-close>知道了</button>
+  </div>
+</div>
+{% endif %}
+
 {% if images|length > 1 %}
 <script>
   const mainImage = document.querySelector(".detail-main-img");
@@ -137,6 +148,30 @@
       button.classList.add("active");
     });
   });
+</script>
+{% endif %}
+{% if request.args.get('reported') == '1' %}
+<script>
+  const reportModal = document.querySelector("[data-report-modal]");
+  const reportModalClose = document.querySelector("[data-report-modal-close]");
+
+  function closeReportModal() {
+    if (reportModal) reportModal.hidden = true;
+    const cleanUrl = window.location.pathname + window.location.search
+      .replace(/([?&])reported=1(&|$)/, "$1")
+      .replace(/[?&]$/, "");
+    window.history.replaceState({}, "", cleanUrl || window.location.pathname);
+  }
+
+  if (reportModalClose) {
+    reportModalClose.addEventListener("click", closeReportModal);
+  }
+
+  if (reportModal) {
+    reportModal.addEventListener("click", (event) => {
+      if (event.target === reportModal) closeReportModal();
+    });
+  }
 </script>
 {% endif %}
 <script>

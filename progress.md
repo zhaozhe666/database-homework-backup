@@ -456,3 +456,67 @@
 - 改动文件：无代码改动；本轮只重启运行中的旧 Flask 服务并做复核。
 - 当前服务：`127.0.0.1:5000` 已由当前代码重新启动。
 - 回滚方式：如需回到旧运行状态，只能重新启动旧版本代码；本轮没有产生代码回滚点。
+
+## 2026-06-26 - Task: 联系卖家消息发送后自动跳转对话
+### What was done
+- 将商品详情页“联系卖家”发送成功后的跳转目标改为对应卖家的消息对话页，而不是停留在商品详情页。
+- 同步更新了业务说明，明确联系卖家的发送结果会直接进入与卖家的对话框。
+### Testing
+- 通过：`python -m py_compile app.py init_db.py db.py config.py _verify.py _smoke.py`。
+- 通过：定向 Flask test client 验证商品联系消息 POST 返回 302，并跳转到 `/me/messages?with_user=<seller_id>`。
+- 通过：`python _verify.py` 和 `python _smoke.py` 完整业务验证。
+- 通过：浏览器实际操作商品详情页联系卖家，发送后自动进入 `我的消息` 对应对话，并能看到刚发送的内容。
+### Notes
+- 改动文件：`代码/app.py`，调整商品联系卖家的成功跳转逻辑。
+- 改动文件：`代码/说明.md`，补充联系卖家发送后自动进入对话的说明。
+- 回滚方式：还原 `代码/app.py` 中 `send_product_message` 的跳转语句，并同步撤回 `代码/说明.md` 的一句说明。
+
+## 2026-06-27 - Task: 放大页面操作提示条
+### What was done
+- 将全站 flash 提示条调整为更醒目的样式：字号从 14px 提升到 16px，增加加粗、左侧状态圆点、内边距和轻阴影。
+- 更新静态 CSS 版本号，避免浏览器继续使用旧缓存导致提示样式不刷新。
+### Testing
+- 通过：`python -m py_compile app.py init_db.py db.py config.py _verify.py _smoke.py`。
+- 通过：浏览器触发“请先登录”提示并检查实际样式，确认 CSS 版本为 `ui20260627`，提示字号为 16px、字重为 800、高度约 57px。
+- 通过：浏览器恢复到商品详情页 `/product/57`，页面无调试报错。
+### Notes
+- 改动文件：`代码/static/style.css`，放大全站 flash 提示条并增加状态圆点。
+- 改动文件：`代码/templates/base.html`，更新静态资源版本参数。
+- 回滚方式：还原上述两个文件中本轮关于 `.flash` 样式和 CSS 版本号的改动。
+
+## 2026-06-27 - Task: 举报提交成功弹窗
+### What was done
+- 将商品举报提交成功后的反馈从顶部提示改为商品详情页弹窗，文案为“感谢你的举报”，并说明管理员会在后台核实处理。
+- 弹窗支持点击“知道了”关闭，关闭后会清理 URL 中的 `reported=1` 参数，避免刷新后重复弹出。
+- 同步保留并完善了更醒目的全站提示条样式，以及联系卖家发送后进入对话的说明。
+### Testing
+- 通过：`python -m py_compile app.py init_db.py db.py config.py _verify.py _smoke.py`。
+- 通过：定向 Flask test client 验证举报 POST 跳转到 `/product/<id>?reported=1`，详情页包含举报成功弹窗 DOM。
+- 通过：`python _verify.py` 和 `python _smoke.py` 完整业务验证。
+- 通过：浏览器实际提交举报后出现“感谢你的举报”弹窗；点击“知道了”后弹窗隐藏，URL 从 `/product/4?reported=1` 清理为 `/product/4`。
+### Notes
+- 改动文件：`代码/app.py`，调整举报提交成功后的跳转参数，并保留联系卖家发送后进入对话的逻辑。
+- 改动文件：`代码/templates/product_detail.html`，新增举报成功弹窗结构和关闭脚本。
+- 改动文件：`代码/static/style.css`，新增举报弹窗样式并放大全站提示条。
+- 改动文件：`代码/templates/base.html`，更新 CSS 版本号，确保浏览器加载新样式。
+- 改动文件：`代码/说明.md`，同步举报弹窗和联系卖家跳转说明。
+- 回滚方式：还原上述文件中本轮关于举报弹窗、提示条样式、CSS 版本号和联系卖家跳转说明的改动。
+
+## 2026-06-27 - Task: 双代理复查并准备 Git 备份
+### What was done
+- 对联系卖家自动进入对话、举报提交成功弹窗两处改动做了主线程复查和两个只读子代理复查。
+- 根据只读代码审查结果，将举报弹窗触发条件收紧为 `reported == '1'`，避免手动访问 `?reported=0` 或 `?reported=false` 时误显示成功弹窗。
+- 页面验收代理确认真实浏览器流程通过：联系卖家会进入对应对话，举报弹窗关闭后会清理 URL 参数。
+### Testing
+- 通过：`python -m py_compile app.py init_db.py db.py config.py _verify.py _smoke.py`。
+- 通过：定向 Flask test client 验证联系卖家跳转、举报成功弹窗、`reported=0/false` 不弹窗。
+- 通过：`python _verify.py` 和 `python _smoke.py` 完整业务验证。
+- 通过：`git diff --check`。
+- 通过：两个只读子代理复查；页面验收代理产生了测试消息 id=57 和举报 id=11，作为演示库验收痕迹保留。
+### Notes
+- 改动文件：`代码/app.py`，联系卖家发送后跳转到对应消息对话，举报成功跳转带 `reported=1`。
+- 改动文件：`代码/templates/product_detail.html`，新增举报感谢弹窗，并限制仅 `reported=1` 展示。
+- 改动文件：`代码/static/style.css`，新增举报弹窗样式并放大全站提示条。
+- 改动文件：`代码/templates/base.html`，更新 CSS 版本号以加载新样式。
+- 改动文件：`代码/说明.md`，同步说明联系卖家跳转和举报弹窗反馈。
+- 回滚方式：还原本轮上述文件改动；如需清理验收数据，可删除 messages.id=57 和 product_reports.id=11。
