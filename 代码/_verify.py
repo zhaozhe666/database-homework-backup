@@ -95,21 +95,27 @@ print("CSRF 无 token POST 拦截 OK")
 
 sfx = random.randint(100000, 999999)
 seller = {"username": f"s{sfx}", "password": "pass1234",
-          "nickname": f"测试卖家{sfx}", "phone": f"139{sfx % 100000:05d}1"}
+          "nickname": f"测试卖家{sfx}", "phone": f"139{sfx % 100000:05d}1", "phone_code": "000000"}
 buyer = {"username": f"b{sfx}", "password": "pass1234",
-         "nickname": f"测试买家{sfx}", "phone": f"139{sfx % 100000:05d}2"}
+         "nickname": f"测试买家{sfx}", "phone": f"139{sfx % 100000:05d}2", "phone_code": "000000"}
 buyer2 = {"username": f"c{sfx}", "password": "pass1234",
-          "nickname": f"测试同学{sfx}", "phone": f"139{sfx % 100000:05d}3"}
+          "nickname": f"测试同学{sfx}", "phone": f"139{sfx % 100000:05d}3", "phone_code": "000000"}
 admin = {"username": f"a{sfx}", "password": "pass1234",
-         "nickname": f"测试管理员{sfx}", "phone": f"139{sfx % 100000:05d}4"}
+         "nickname": f"测试管理员{sfx}", "phone": f"139{sfx % 100000:05d}4", "phone_code": "000000"}
 
 print("注册卖家:", post("/register", **seller).status_code)
 print("注册买家:", post("/register", **buyer).status_code)
 print("注册同学:", post("/register", **buyer2).status_code)
 db.execute(
-    "INSERT INTO users (username, password_hash, nickname, phone) "
-    "VALUES (%s, %s, %s, %s)",
-    (admin["username"], generate_password_hash(admin["password"]), admin["nickname"], admin["phone"]),
+    "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone) "
+    "VALUES (%s, %s, %s, %s, %s)",
+    (
+        admin["username"],
+        generate_password_hash(admin["password"]),
+        generate_password_hash("111111"),
+        admin["nickname"],
+        admin["phone"],
+    ),
 )
 admin_id = db.query_one("SELECT id FROM users WHERE username=%s", (admin["username"],))["id"]
 db.execute(
@@ -204,6 +210,7 @@ created_admin = {
     "password": "pass1234",
     "nickname": f"新管理员{sfx}",
     "phone": f"139{sfx % 100000:05d}5",
+    "phone_code": "000000",
 }
 print("已有管理员创建管理员:", post("/admin/register", **created_admin).status_code)
 created_admin_row = db.query_one(
@@ -267,7 +274,7 @@ assert db.query_one(
 # 已付款后申请退款，退款中不能直接确认收货，卖家同意后退回买家余额，商品恢复在售。
 post("/order/create", product_id=str(pid), address="松园3栋")
 refund_oid = latest_order_id(pid)
-post(f"/order/{refund_oid}/pay")
+post(f"/order/{refund_oid}/pay", payment_password="111111")
 assert db.query_one(
     "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='order_paid'",
     (refund_oid,),
@@ -286,7 +293,7 @@ print("退款申请中禁止直接确认收货 OK")
 
 post("/order/create", product_id=str(cancel_refund_pid), address="松园3栋")
 cancel_refund_oid = latest_order_id(cancel_refund_pid)
-post(f"/order/{cancel_refund_oid}/pay")
+post(f"/order/{cancel_refund_oid}/pay", payment_password="111111")
 post(f"/order/{cancel_refund_oid}/refund/request", reason="想想还是要")
 post(f"/order/{cancel_refund_oid}/refund/cancel")
 assert db.query_one(
@@ -305,7 +312,7 @@ assert cancel_refund_order["refund_requested_at"] is None
 
 post("/order/create", product_id=str(reject_refund_pid), address="松园3栋")
 reject_refund_oid = latest_order_id(reject_refund_pid)
-post(f"/order/{reject_refund_oid}/pay")
+post(f"/order/{reject_refund_oid}/pay", payment_password="111111")
 post(f"/order/{reject_refund_oid}/refund/request", reason="想退款")
 assert db.query_one(
     "SELECT status FROM orders WHERE id=%s", (reject_refund_oid,),
@@ -403,7 +410,7 @@ client.get("/logout")
 post("/login", username=buyer["username"], password="pass1234")
 post("/order/create", product_id=str(pid), address="松园3栋")
 complete_oid = latest_order_id(pid)
-post(f"/order/{complete_oid}/pay")
+post(f"/order/{complete_oid}/pay", payment_password="111111")
 post(f"/order/{complete_oid}/complete")
 assert db.query_one("SELECT status FROM orders WHERE id=%s", (complete_oid,))["status"] == "paid"
 print("卖家未发货前禁止确认收货 OK")
@@ -474,3 +481,4 @@ db.execute("DELETE FROM users WHERE username IN (%s,%s,%s,%s)",
            (buyer["username"], seller["username"], buyer2["username"], admin["username"]))
 db.execute("DELETE FROM users WHERE username=%s", (created_admin["username"],))
 print("清理完成，超时取消、退款、评价和消息全部通过 OK")
+

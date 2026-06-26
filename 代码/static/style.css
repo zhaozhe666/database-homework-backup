@@ -875,6 +875,10 @@ button, input, textarea, select { font: inherit; }
 
 .empty a { color: var(--primary); font-weight: 700; }
 
+.market-back-row {
+  margin-bottom: 12px;
+}
+
 .detail {
   display: grid;
   grid-template-columns: minmax(320px, 460px) 1fr;
@@ -1000,6 +1004,44 @@ button, input, textarea, select { font: inherit; }
   display: grid;
   gap: 10px;
   margin-top: 14px;
+}
+
+.detail-action-panels {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.detail-action-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-toggle {
+  width: 100%;
+}
+
+.detail-toggle.active {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.detail-toggle.btn-danger.active {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.collapsible-form {
+  margin-top: 0;
+  padding: 12px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.collapsible-form[hidden] {
+  display: none;
 }
 
 .message-form textarea,
@@ -1177,6 +1219,53 @@ button, input, textarea, select { font: inherit; }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.verify-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 7px 0 14px;
+}
+
+.verify-row input {
+  margin-top: 0;
+}
+
+.send-code-btn {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.send-code-btn:disabled {
+  color: var(--muted);
+  background: var(--surface-soft);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+
+.bound-phone-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 14px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.bound-phone-box span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bound-phone-box strong {
+  color: var(--ink);
+  font-size: 15px;
 }
 
 .image-field {
@@ -1458,6 +1547,21 @@ button, input, textarea, select { font: inherit; }
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 10px;
+}
+
+.pay-password-form {
+  display: inline-grid;
+  grid-template-columns: minmax(180px, 220px) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pay-password-form input {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
 }
 
 .refund-form {
@@ -2997,6 +3101,7 @@ button, input, textarea, select { font: inherit; }
   .me-grid,
   .admin-stat-grid,
   .form-row,
+  .verify-row,
   .image-field,
   .detail-meta,
   .order-meta { grid-template-columns: 1fr; }
@@ -3013,7 +3118,8 @@ button, input, textarea, select { font: inherit; }
   .me-actions { justify-content: flex-start; }
   .buy-form { grid-template-columns: 1fr; }
   .pay-countdown { grid-template-columns: 1fr; }
-  .refund-form { grid-template-columns: 1fr; }
+  .refund-form,
+  .pay-password-form { grid-template-columns: 1fr; }
   .message-layout { grid-template-columns: 1fr; min-height: auto; }
   .conversation-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 360px; }
   .chat-panel { min-height: 520px; }

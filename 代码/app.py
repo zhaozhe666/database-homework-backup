@@ -42,6 +42,7 @@ RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FIELD_NAME = "_csrf_token"
+DEFAULT_PAYMENT_PASSWORD = "111111"
 EXPIRED_ORDER_REFRESH_ENDPOINTS = {
     "index", "product_detail", "order_detail",
     "admin_dashboard", "admin_orders",
@@ -301,6 +302,10 @@ def csrf_field():
         '<input type="hidden" name="%s" value="%s">'
         % (CSRF_FIELD_NAME, escape(csrf_token()))
     )
+
+
+def is_six_digit_code(value):
+    return bool(value and value.isdigit() and len(value) == 6)
 
 
 def validate_csrf_token():
@@ -698,6 +703,17 @@ def ensure_runtime_schema():
             cur, "users", "is_active",
             "TINYINT(1) NOT NULL DEFAULT 1 COMMENT '账号是否启用'",
         )
+        add_column_if_missing(
+            cur, "users", "payment_password_hash",
+            "VARCHAR(255) DEFAULT NULL COMMENT '支付密码哈希'",
+        )
+        cur.execute("SELECT id FROM users WHERE payment_password_hash IS NULL OR payment_password_hash=''")
+        users_missing_payment_password = cur.fetchall()
+        for user_row in users_missing_payment_password:
+            cur.execute(
+                "UPDATE users SET payment_password_hash=%s WHERE id=%s",
+                (generate_password_hash(DEFAULT_PAYMENT_PASSWORD), user_row["id"]),
+            )
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS admins (
@@ -966,8 +982,8 @@ def ensure_runtime_schema():
 
 @app.before_request
 def prepare_runtime_schema():
-    validate_csrf_token()
     ensure_runtime_schema()
+    validate_csrf_token()
     if request.endpoint in EXPIRED_ORDER_REFRESH_ENDPOINTS:
         cancel_expired_unpaid_orders()
 
@@ -1007,7 +1023,7 @@ def index():
 @app.route("/product/<int:pid>")
 def product_detail(pid):
     product = query_one(
-        "SELECT p.*, u.nickname AS seller_name, u.phone AS seller_phone, "
+        "SELECT p.*, u.nickname AS seller_name, "
         "c.name AS category_name "
         "FROM products p JOIN users u ON p.seller_id = u.id "
         "LEFT JOIN categories c ON p.category_id = c.id "
@@ -1148,9 +1164,13 @@ def register():
         password = request.form.get("password", "")
         nickname = request.form.get("nickname", "").strip()
         phone = request.form.get("phone", "").strip()
+        phone_code = request.form.get("phone_code", "").strip()
 
-        if not username or not password or not nickname:
-            flash("账号、密码、昵称不能为空", "danger")
+        if not username or not password or not nickname or not phone:
+            flash("账号、密码、昵称、手机号不能为空", "danger")
+            return render_template("register.html")
+        if not phone_code:
+            flash("请填写手机验证码", "danger")
             return render_template("register.html")
         if query_one("SELECT id FROM users WHERE username=%s", (username,)):
             flash("该账号已被注册", "danger")
@@ -1158,9 +1178,15 @@ def register():
 
         with get_cursor(commit=True) as cur:
             cur.execute(
-                "INSERT INTO users (username, password_hash, nickname, phone) "
-                "VALUES (%s, %s, %s, %s)",
-                (username, generate_password_hash(password), nickname, phone or None),
+                "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (
+                    username,
+                    generate_password_hash(password),
+                    generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
+                    nickname,
+                    phone,
+                ),
             )
         flash("注册成功，请登录", "success")
         return redirect(url_for("login"))
@@ -1755,9 +1781,13 @@ def admin_register():
         password = request.form.get("password", "")
         nickname = request.form.get("nickname", "").strip()
         phone = request.form.get("phone", "").strip()
+        phone_code = request.form.get("phone_code", "").strip()
 
-        if not username or not password or not nickname:
-            flash("账号、密码、昵称不能为空", "danger")
+        if not username or not password or not nickname or not phone:
+            flash("账号、密码、昵称、手机号不能为空", "danger")
+            return render_template("admin_register.html")
+        if not phone_code:
+            flash("请填写手机验证码", "danger")
             return render_template("admin_register.html")
         if query_one("SELECT id FROM users WHERE username=%s", (username,)):
             flash("该账号已被注册", "danger")
@@ -1765,9 +1795,15 @@ def admin_register():
 
         with get_cursor(commit=True) as cur:
             cur.execute(
-                "INSERT INTO users (username, password_hash, nickname, phone) "
-                "VALUES (%s, %s, %s, %s)",
-                (username, generate_password_hash(password), nickname, phone or None),
+                "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (
+                    username,
+                    generate_password_hash(password),
+                    generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
+                    nickname,
+                    phone,
+                ),
             )
             new_user_id = cur.lastrowid
             cur.execute(
@@ -2103,6 +2139,10 @@ def create_order_appeal(oid):
 @login_required
 def pay_order(oid):
     buyer_id = session["user_id"]
+    payment_password = request.form.get("payment_password", "").strip()
+    if not is_six_digit_code(payment_password):
+        flash("请输入 6 位数字支付密码", "danger")
+        return redirect(url_for("order_detail", oid=oid))
     try:
         with get_cursor(commit=True) as cur:
             cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
@@ -2143,9 +2183,17 @@ def pay_order(oid):
                 flash("订单超过 10 分钟未付款，已自动取消", "warning")
                 return redirect(url_for("order_detail", oid=oid))
 
-            # 校验买家余额
-            cur.execute("SELECT balance FROM users WHERE id=%s FOR UPDATE", (buyer_id,))
+            # 校验买家支付密码和余额
+            cur.execute(
+                "SELECT balance, payment_password_hash FROM users WHERE id=%s FOR UPDATE",
+                (buyer_id,),
+            )
             buyer = cur.fetchone()
+            if not buyer.get("payment_password_hash") or not check_password_hash(
+                buyer["payment_password_hash"], payment_password
+            ):
+                flash("支付密码不正确", "danger")
+                return redirect(url_for("order_detail", oid=oid))
             if buyer["balance"] < order["amount"]:
                 flash("余额不足，请先充值", "danger")
                 return redirect(url_for("order_detail", oid=oid))
@@ -2564,7 +2612,6 @@ def profile():
     user = current_user()
     if request.method == "POST":
         nickname = request.form.get("nickname", "").strip()
-        phone = request.form.get("phone", "").strip()
         old_password = request.form.get("old_password", "")
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
@@ -2593,18 +2640,85 @@ def profile():
         with get_cursor(commit=True) as cur:
             if password_hash:
                 cur.execute(
-                    "UPDATE users SET nickname=%s, phone=%s, password_hash=%s WHERE id=%s",
-                    (nickname, phone or None, password_hash, session["user_id"]),
+                    "UPDATE users SET nickname=%s, password_hash=%s WHERE id=%s",
+                    (nickname, password_hash, session["user_id"]),
                 )
             else:
                 cur.execute(
-                    "UPDATE users SET nickname=%s, phone=%s WHERE id=%s",
-                    (nickname, phone or None, session["user_id"]),
+                    "UPDATE users SET nickname=%s WHERE id=%s",
+                    (nickname, session["user_id"]),
                 )
         flash("账号资料已保存", "success")
         return redirect(url_for("profile"))
 
     return render_template("profile.html", user=user)
+
+
+@app.route("/me/phone", methods=["GET", "POST"])
+@login_required
+def change_phone():
+    user = current_user()
+    if request.method == "POST":
+        phone = request.form.get("phone", "").strip()
+        profile_phone_code = request.form.get("profile_phone_code", "").strip()
+        if not phone:
+            flash("请填写新手机号", "danger")
+            return render_template("change_phone.html", user=user)
+        if phone == (user.get("phone") or ""):
+            flash("新手机号不能和当前手机号相同", "danger")
+            return render_template("change_phone.html", user=user)
+        if not profile_phone_code:
+            flash("请填写新手机号验证码", "danger")
+            return render_template("change_phone.html", user=user)
+
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE users SET phone=%s WHERE id=%s",
+                (phone, session["user_id"]),
+            )
+        flash("手机号已修改", "success")
+        return redirect(url_for("profile"))
+
+    return render_template("change_phone.html", user=user)
+
+
+@app.route("/me/payment-password", methods=["GET", "POST"])
+@login_required
+def change_payment_password():
+    user = current_user()
+    if request.method == "POST":
+        old_payment_password = request.form.get("old_payment_password", "").strip()
+        new_payment_password = request.form.get("new_payment_password", "").strip()
+        confirm_payment_password = request.form.get("confirm_payment_password", "").strip()
+        payment_phone_code = request.form.get("payment_phone_code", "").strip()
+
+        if not user.get("phone"):
+            flash("请先绑定手机号后再修改支付密码", "danger")
+            return render_template("change_payment_password.html", user=user)
+        if not old_payment_password or not new_payment_password or not confirm_payment_password or not payment_phone_code:
+            flash("请完整填写原支付密码、新支付密码、确认支付密码和手机验证码", "danger")
+            return render_template("change_payment_password.html", user=user)
+        if not is_six_digit_code(old_payment_password) or not is_six_digit_code(new_payment_password):
+            flash("支付密码必须是 6 位数字", "danger")
+            return render_template("change_payment_password.html", user=user)
+        if new_payment_password != confirm_payment_password:
+            flash("两次输入的新支付密码不一致", "danger")
+            return render_template("change_payment_password.html", user=user)
+        if not user.get("payment_password_hash") or not check_password_hash(
+            user["payment_password_hash"], old_payment_password
+        ):
+            flash("原支付密码不正确", "danger")
+            return render_template("change_payment_password.html", user=user)
+
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE users SET payment_password_hash=%s WHERE id=%s",
+                (generate_password_hash(new_payment_password), session["user_id"]),
+            )
+        flash("支付密码已修改", "success")
+        return redirect(url_for("profile"))
+
+    return render_template("change_payment_password.html", user=user)
 
 
 @app.route("/me/selling")

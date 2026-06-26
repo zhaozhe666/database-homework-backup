@@ -2,6 +2,9 @@
 {% block title %}{{ product.title }} - 二手集市{% endblock %}
 {% block content %}
 {% set images = product.images if product.images is defined else image_urls(product.image_url) %}
+<div class="market-back-row">
+  <a class="btn-back" href="{{ url_for('index', refresh=1) }}">← 返回市场</a>
+</div>
 <div class="detail">
   <div class="detail-img">
     {% if images %}
@@ -83,16 +86,24 @@
     {% endif %}
 
     {% if current_user and current_user.id != product.seller_id %}
-      <form action="{{ url_for('send_product_message', pid=product.id) }}" method="post" class="message-form">
-        {{ csrf_field() }}
-        <textarea name="content" rows="3" maxlength="500" placeholder="想问卖家什么？比如成色细节、取货地点、是否可小刀"></textarea>
-        <button type="submit" class="btn-outline">联系卖家</button>
-      </form>
-      <form action="{{ url_for('report_product', pid=product.id) }}" method="post" class="message-form">
-        {{ csrf_field() }}
-        <textarea name="reason" rows="2" maxlength="255" placeholder="举报原因，例如虚假描述、违禁商品、价格异常等"></textarea>
-        <button type="submit" class="btn-outline btn-danger">举报商品</button>
-      </form>
+      <div class="detail-action-panels">
+        <section class="detail-action-panel" data-panel="contact">
+          <button type="button" class="btn-outline detail-toggle" data-target="contact-panel">联系卖家</button>
+          <form id="contact-panel" action="{{ url_for('send_product_message', pid=product.id) }}" method="post" class="message-form collapsible-form" hidden>
+            {{ csrf_field() }}
+            <textarea name="content" rows="3" maxlength="500" placeholder="想问卖家什么？比如成色细节、取货地点、是否可小刀"></textarea>
+            <button type="submit" class="btn-primary">发送消息</button>
+          </form>
+        </section>
+        <section class="detail-action-panel" data-panel="report">
+          <button type="button" class="btn-outline btn-danger detail-toggle" data-target="report-panel">举报商品</button>
+          <form id="report-panel" action="{{ url_for('report_product', pid=product.id) }}" method="post" class="message-form collapsible-form" hidden>
+            {{ csrf_field() }}
+            <textarea name="reason" rows="2" maxlength="255" placeholder="举报原因，例如虚假描述、违禁商品、价格异常等"></textarea>
+            <button type="submit" class="btn-outline btn-danger">提交举报</button>
+          </form>
+        </section>
+      </div>
     {% endif %}
   </div>
 </div>
@@ -128,4 +139,26 @@
   });
 </script>
 {% endif %}
+<script>
+  document.querySelectorAll(".detail-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = document.getElementById(button.dataset.target);
+      const shouldOpen = target.hidden;
+
+      document.querySelectorAll(".collapsible-form").forEach((form) => {
+        form.hidden = true;
+      });
+      document.querySelectorAll(".detail-toggle").forEach((item) => {
+        item.classList.remove("active");
+      });
+
+      if (shouldOpen) {
+        target.hidden = false;
+        button.classList.add("active");
+        const input = target.querySelector("textarea");
+        if (input) input.focus();
+      }
+    });
+  });
+</script>
 {% endblock %}

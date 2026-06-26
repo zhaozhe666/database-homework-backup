@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}修改手机号 · 二手集市{% endblock %}
+{% block content %}
+<div class="profile-layout">
+  <aside class="profile-panel">
+    <div class="profile-avatar">{{ user.nickname[:1] }}</div>
+    <h2>修改手机号</h2>
+    <p>账号：{{ user.username }}</p>
+    <p>当前手机号：{{ user.phone or '未绑定' }}</p>
+  </aside>
+
+  <form class="profile-form" method="post">
+    {{ csrf_field() }}
+    <section>
+      <h2>验证新手机号</h2>
+      <p class="auth-tip">先填写新的手机号，再点击发送验证码。当前为测试环境，验证码任意填写即可通过。</p>
+      <div class="bound-phone-box">
+        <span>当前手机号</span>
+        <strong>{{ user.phone or '未绑定' }}</strong>
+      </div>
+      <label>新手机号<input type="text" name="phone" maxlength="20" placeholder="填写新的手机号" required></label>
+      <label>新手机号验证码</label>
+      <div class="verify-row">
+        <input type="text" name="profile_phone_code" placeholder="测试环境任意填写" required>
+        <button type="button" class="btn-outline send-code-btn" data-code-button data-requires="phone" data-require-message="请先填写新手机号">发送验证码</button>
+      </div>
+    </section>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">确认修改</button>
+      <a class="btn-outline" href="{{ url_for('profile') }}">返回账号设置</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

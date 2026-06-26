@@ -13,6 +13,7 @@ from config import DB_CONFIG
 from db import get_connection
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
+DEFAULT_PAYMENT_PASSWORD = "111111"
 
 
 def split_sql(text):
@@ -104,9 +105,16 @@ def seed_data():
             user_ids = {}
             for username, pwd, nickname, phone, balance in users:
                 cur.execute(
-                    "INSERT INTO users (username, password_hash, nickname, phone, balance) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (username, generate_password_hash(pwd), nickname, phone, balance),
+                    "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone, balance) "
+                    "VALUES (%s, %s, %s, %s, %s, %s)",
+                    (
+                        username,
+                        generate_password_hash(pwd),
+                        generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
+                        nickname,
+                        phone,
+                        balance,
+                    ),
                 )
                 user_ids[username] = cur.lastrowid
             cur.execute(

@@ -7,7 +7,24 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260626') }}">
 </head>
 <body>
-  {% if request.endpoint == 'index' %}
+  {% set is_admin_area = request.endpoint and request.endpoint.startswith('admin') %}
+  {% set account_endpoints = [
+    'me',
+    'profile',
+    'change_phone',
+    'change_payment_password',
+    'my_selling',
+    'my_products',
+    'my_favorites',
+    'my_messages',
+    'my_notifications',
+    'my_bought',
+    'my_sold',
+    'order_detail',
+    'recharge'
+  ] %}
+  {% set is_account_area = request.endpoint in account_endpoints %}
+  {% if not is_account_area and not is_admin_area %}
   <header class="navbar">
     <div class="nav-inner">
       <a class="brand" href="{{ url_for('index') }}">
@@ -70,7 +87,6 @@
     <p>校园二手交易平台 · 数据库课程设计 · MySQL + Flask</p>
   </footer>
   {% else %}
-  {% set is_admin_area = request.endpoint and request.endpoint.startswith('admin') %}
   <div class="app-shell {% if not is_admin_area %}account-shell{% endif %}">
     <aside class="side-nav">
       <a class="side-brand" href="{{ url_for('index') }}">
@@ -105,7 +121,7 @@
             <em>{{ notification_summary.unread_notifications + notification_summary.refund_requests + notification_summary.pending_shipments }}</em>
           {% endif %}
         </a>
-        <a class="{% if request.endpoint in ['profile', 'recharge'] %}active{% endif %}" href="{{ url_for('profile') if current_user else url_for('login') }}">
+        <a class="{% if request.endpoint in ['profile', 'change_phone', 'change_payment_password', 'recharge'] %}active{% endif %}" href="{{ url_for('profile') if current_user else url_for('login') }}">
           <span class="side-ico side-ico-wallet"></span>钱包与资料
         </a>
           {% if current_user and current_user.is_admin %}
@@ -205,5 +221,37 @@
     </div>
   </div>
   {% endif %}
+  <script>
+    document.querySelectorAll("[data-code-button]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const requiredFieldName = button.dataset.requires;
+        if (requiredFieldName) {
+          const requiredField = document.querySelector(`[name="${requiredFieldName}"]`);
+          if (requiredField && !requiredField.value.trim()) {
+            requiredField.focus();
+            alert(button.dataset.requireMessage || "请先填写必填信息");
+            return;
+          }
+        }
+
+        if (button.disabled) return;
+        let seconds = 60;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "已发送 " + seconds + "s";
+
+        const timer = window.setInterval(() => {
+          seconds -= 1;
+          if (seconds <= 0) {
+            window.clearInterval(timer);
+            button.disabled = false;
+            button.textContent = originalText;
+            return;
+          }
+          button.textContent = "已发送 " + seconds + "s";
+        }, 1000);
+      });
+    });
+  </script>
 </body>
 </html>

@@ -14,6 +14,7 @@ CREATE TABLE users (
   id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username      VARCHAR(50)  NOT NULL COMMENT '登录账号',
   password_hash VARCHAR(255) NOT NULL COMMENT '加密后的密码',
+  payment_password_hash VARCHAR(255) NOT NULL COMMENT '支付密码哈希',
   nickname      VARCHAR(50)  NOT NULL COMMENT '昵称',
   phone         VARCHAR(20)  DEFAULT NULL COMMENT '联系电话',
   balance       DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '钱包余额',
@@ -245,6 +246,56 @@ CREATE TABLE notifications (
 -- ---------------------------------------------------------------------
 -- 基础分类数据
 -- ---------------------------------------------------------------------
+CREATE TABLE admin_logs (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  admin_id    INT UNSIGNED NOT NULL,
+  action      VARCHAR(60) NOT NULL,
+  target_type VARCHAR(40) NOT NULL,
+  target_id   INT UNSIGNED DEFAULT NULL,
+  detail      VARCHAR(500) DEFAULT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_admin_logs_admin (admin_id, created_at),
+  KEY idx_admin_logs_target (target_type, target_id),
+  CONSTRAINT fk_admin_logs_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='管理员操作日志';
+
+CREATE TABLE product_reports (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  product_id  INT UNSIGNED NOT NULL,
+  reporter_id INT UNSIGNED NOT NULL,
+  reason      VARCHAR(255) NOT NULL,
+  status      ENUM('pending','resolved','rejected') NOT NULL DEFAULT 'pending',
+  admin_id    INT UNSIGNED DEFAULT NULL,
+  admin_note  VARCHAR(255) DEFAULT NULL,
+  handled_at  DATETIME DEFAULT NULL,
+  created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_product_reports_status (status, created_at),
+  KEY idx_product_reports_product (product_id),
+  CONSTRAINT fk_product_report_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+  CONSTRAINT fk_product_report_reporter FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_product_report_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商品举报';
+
+CREATE TABLE order_appeals (
+  id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  order_id     INT UNSIGNED NOT NULL,
+  appellant_id INT UNSIGNED NOT NULL,
+  reason       VARCHAR(255) NOT NULL,
+  status       ENUM('pending','resolved','rejected') NOT NULL DEFAULT 'pending',
+  admin_id     INT UNSIGNED DEFAULT NULL,
+  resolution   VARCHAR(255) DEFAULT NULL,
+  handled_at   DATETIME DEFAULT NULL,
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_order_appeals_status (status, created_at),
+  KEY idx_order_appeals_order (order_id),
+  CONSTRAINT fk_order_appeal_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  CONSTRAINT fk_order_appeal_appellant FOREIGN KEY (appellant_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_order_appeal_admin FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易申诉';
+
 INSERT INTO categories (name) VALUES
 ('数码电子'),
 ('图书教材'),

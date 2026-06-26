@@ -42,4 +42,10 @@
 {% else %}
   <div class="empty">暂无相关商品，去 <a href="{{ url_for('publish') }}">发布</a> 第一件吧～</div>
 {% endif %}
+{% if request.args.get('refresh') == '1' %}
+<script>
+  const cleanUrl = window.location.pathname + window.location.search.replace(/([?&])refresh=1(&|$)/, "$1").replace(/[?&]$/, "");
+  window.location.replace(cleanUrl || "{{ url_for('index') }}");
+</script>
+{% endif %}
 {% endblock %}
