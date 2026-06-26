@@ -16,6 +16,7 @@ import random
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urljoin, urlparse
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
@@ -68,6 +69,19 @@ ORDER_STATUS = {
     "refunded": "已退款",
     "completed": "已完成",
     "cancelled": "已取消",
+}
+
+
+# Extra workflow status labels for reports and appeals.
+REPORT_STATUS = {
+    "pending": "待处理",
+    "resolved": "已处理",
+    "rejected": "不成立",
+}
+APPEAL_STATUS = {
+    "pending": "待仲裁",
+    "resolved": "已处理",
+    "rejected": "不受理",
 }
 
 
@@ -124,6 +138,87 @@ def active_admin_count(permission=None):
         "WHERE %s" % where
     )
     return row["c"] if row else 0
+
+
+def is_safe_next_url(target):
+    if not target:
+        return False
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+    return test_url.scheme in ("http", "https") and ref_url.netloc == test_url.netloc
+
+
+def safe_redirect_target(default_endpoint="index"):
+    target = request.args.get("next")
+    if is_safe_next_url(target):
+        return target
+    return url_for(default_endpoint)
+
+
+def add_admin_log(cur, action, target_type, target_id=None, detail=None):
+    admin_id = session.get("user_id")
+    if not admin_id:
+        return
+    cur.execute(
+        "INSERT INTO admin_logs (admin_id, action, target_type, target_id, detail) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (admin_id, action, target_type, target_id, detail),
+    )
+
+
+ADMIN_LOG_ACTIONS = {
+    "product_remove": "下架商品",
+    "product_restore": "恢复商品",
+    "admin_permissions_update": "修改管理员权限",
+    "user_status_update": "启用/停用用户",
+    "admin_register_setting": "调整管理员注册开关",
+    "product_report_resolved": "处理商品举报：成立",
+    "product_report_rejected": "处理商品举报：不成立",
+    "order_appeal_resolved": "处理交易申诉：已处理",
+    "order_appeal_rejected": "处理交易申诉：不受理",
+}
+
+
+def hydrate_admin_logs(logs):
+    for log in logs:
+        log["action_label"] = ADMIN_LOG_ACTIONS.get(log["action"], log["action"])
+        log["target_label"] = "-"
+        log["target_url"] = None
+        target_id = log.get("target_id")
+        if not target_id:
+            continue
+        if log["target_type"] == "product":
+            product = query_one("SELECT title FROM products WHERE id=%s", (target_id,))
+            if product:
+                log["target_label"] = "商品：" + product["title"]
+                log["target_url"] = url_for("product_detail", pid=target_id)
+        elif log["target_type"] == "user":
+            user = query_one("SELECT username, nickname FROM users WHERE id=%s", (target_id,))
+            if user:
+                log["target_label"] = "用户：%s（%s）" % (user["nickname"], user["username"])
+        elif log["target_type"] == "product_report":
+            report = query_one(
+                "SELECT r.id, p.id AS product_id, p.title "
+                "FROM product_reports r JOIN products p ON r.product_id=p.id "
+                "WHERE r.id=%s",
+                (target_id,),
+            )
+            if report:
+                log["target_label"] = "举报单 #%s：%s" % (report["id"], report["title"])
+                log["target_url"] = url_for("product_detail", pid=report["product_id"])
+        elif log["target_type"] == "order_appeal":
+            appeal = query_one(
+                "SELECT a.id, a.order_id, o.order_no "
+                "FROM order_appeals a JOIN orders o ON a.order_id=o.id "
+                "WHERE a.id=%s",
+                (target_id,),
+            )
+            if appeal:
+                log["target_label"] = "申诉单 #%s：订单 %s" % (appeal["id"], appeal["order_no"])
+                log["target_url"] = url_for("order_detail", oid=appeal["order_id"])
+        elif log["target_type"] == "setting":
+            log["target_label"] = "系统设置"
+    return logs
 
 
 SELLER_TASK_NOTICE_TYPES = ("order_paid", "refund_requested")
@@ -776,6 +871,72 @@ def ensure_runtime_schema():
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_logs (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              admin_id INT UNSIGNED NOT NULL,
+              action VARCHAR(60) NOT NULL,
+              target_type VARCHAR(40) NOT NULL,
+              target_id INT UNSIGNED DEFAULT NULL,
+              detail VARCHAR(500) DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              KEY idx_admin_logs_admin (admin_id, created_at),
+              KEY idx_admin_logs_target (target_type, target_id),
+              CONSTRAINT fk_admin_logs_admin
+                FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS product_reports (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              product_id INT UNSIGNED NOT NULL,
+              reporter_id INT UNSIGNED NOT NULL,
+              reason VARCHAR(255) NOT NULL,
+              status ENUM('pending','resolved','rejected') NOT NULL DEFAULT 'pending',
+              admin_id INT UNSIGNED DEFAULT NULL,
+              admin_note VARCHAR(255) DEFAULT NULL,
+              handled_at DATETIME DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              KEY idx_product_reports_status (status, created_at),
+              KEY idx_product_reports_product (product_id),
+              CONSTRAINT fk_product_report_product
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+              CONSTRAINT fk_product_report_reporter
+                FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE,
+              CONSTRAINT fk_product_report_admin
+                FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS order_appeals (
+              id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+              order_id INT UNSIGNED NOT NULL,
+              appellant_id INT UNSIGNED NOT NULL,
+              reason VARCHAR(255) NOT NULL,
+              status ENUM('pending','resolved','rejected') NOT NULL DEFAULT 'pending',
+              admin_id INT UNSIGNED DEFAULT NULL,
+              resolution VARCHAR(255) DEFAULT NULL,
+              handled_at DATETIME DEFAULT NULL,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (id),
+              KEY idx_order_appeals_status (status, created_at),
+              KEY idx_order_appeals_order (order_id),
+              CONSTRAINT fk_order_appeal_order
+                FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+              CONSTRAINT fk_order_appeal_appellant
+                FOREIGN KEY (appellant_id) REFERENCES users(id) ON DELETE CASCADE,
+              CONSTRAINT fk_order_appeal_admin
+                FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """
+        )
         sync_payment_schema(cur)
         add_column_if_missing(cur, "notifications", "actor_id", "INT UNSIGNED DEFAULT NULL")
         add_column_if_missing(cur, "notifications", "order_id", "INT UNSIGNED DEFAULT NULL")
@@ -918,6 +1079,8 @@ def unfavorite_product(pid):
             (session["user_id"], pid),
         )
     flash("已取消收藏", "info")
+    if request.form.get("from_page") == "favorites":
+        return redirect(url_for("my_favorites"))
     return redirect(url_for("product_detail", pid=pid))
 
 
@@ -952,6 +1115,32 @@ def send_product_message(pid):
 # --------------------------------------------------------------------- #
 # 注册 / 登录 / 退出
 # --------------------------------------------------------------------- #
+@app.route("/product/<int:pid>/report", methods=["POST"])
+@login_required
+def report_product(pid):
+    product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
+    if not product:
+        abort(404)
+    if product["seller_id"] == session["user_id"]:
+        flash("不能举报自己发布的商品", "warning")
+        return redirect(url_for("product_detail", pid=pid))
+    reason = request.form.get("reason", "").strip()
+    if not reason:
+        flash("请填写举报原因", "danger")
+        return redirect(url_for("product_detail", pid=pid))
+    if len(reason) > 255:
+        flash("举报原因最多 255 字", "danger")
+        return redirect(url_for("product_detail", pid=pid))
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO product_reports (product_id, reporter_id, reason) "
+            "VALUES (%s, %s, %s)",
+            (pid, session["user_id"], reason),
+        )
+    flash("举报已提交，管理员会在后台核实处理", "success")
+    return redirect(url_for("product_detail", pid=pid))
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -992,7 +1181,7 @@ def login():
             return render_template("login.html")
         session["user_id"] = user["id"]
         flash("登录成功，欢迎 %s" % user["nickname"], "success")
-        next_url = request.args.get("next") or url_for("index")
+        next_url = safe_redirect_target()
         return redirect(next_url)
     return render_template("login.html")
 
@@ -1021,6 +1210,8 @@ def admin_dashboard():
         "pending_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='created'")["c"],
         "paid_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='paid'")["c"],
         "refund_orders": query_one("SELECT COUNT(*) AS c FROM orders WHERE status='refund_requested'")["c"],
+        "pending_reports": query_one("SELECT COUNT(*) AS c FROM product_reports WHERE status='pending'")["c"],
+        "pending_appeals": query_one("SELECT COUNT(*) AS c FROM order_appeals WHERE status='pending'")["c"],
     }
     recent_orders = query_all(
         "SELECT o.*, p.title, bu.nickname AS buyer_name, su.nickname AS seller_name "
@@ -1089,6 +1280,193 @@ def admin_orders():
         status_counts=status_counts,
         total_orders=total_orders,
     )
+
+
+@app.route("/admin/reports")
+@admin_required("can_manage_products")
+def admin_reports():
+    status_filter = request.args.get("status", "").strip()
+    where_sql = ""
+    params = []
+    if status_filter in REPORT_STATUS:
+        where_sql = "WHERE r.status=%s "
+        params.append(status_filter)
+    else:
+        status_filter = ""
+    reports = query_all(
+        "SELECT r.*, p.title AS product_title, p.status AS product_status, "
+        "ru.nickname AS reporter_name, su.nickname AS seller_name, au.nickname AS admin_name "
+        "FROM product_reports r "
+        "JOIN products p ON r.product_id = p.id "
+        "JOIN users ru ON r.reporter_id = ru.id "
+        "JOIN users su ON p.seller_id = su.id "
+        "LEFT JOIN users au ON r.admin_id = au.id "
+        f"{where_sql}"
+        "ORDER BY r.created_at DESC",
+        tuple(params),
+    )
+    counts = {row["status"]: row["c"] for row in query_all(
+        "SELECT status, COUNT(*) AS c FROM product_reports GROUP BY status"
+    )}
+    return render_template(
+        "admin_reports.html",
+        reports=reports,
+        status_filter=status_filter,
+        counts=counts,
+        REPORT_STATUS=REPORT_STATUS,
+    )
+
+
+@app.route("/admin/reports/<int:rid>/handle", methods=["POST"])
+@admin_required("can_manage_products")
+def admin_handle_report(rid):
+    action = request.form.get("action")
+    note = request.form.get("note", "").strip()
+    if action not in ("resolved", "rejected"):
+        abort(400)
+    if len(note) > 255:
+        flash("处理说明最多 255 字", "danger")
+        return redirect(url_for("admin_reports"))
+    report = query_one(
+        "SELECT r.*, p.title, p.seller_id FROM product_reports r "
+        "JOIN products p ON r.product_id = p.id WHERE r.id=%s",
+        (rid,),
+    )
+    if not report:
+        abort(404)
+    if report["status"] != "pending":
+        flash("该举报已经处理过", "warning")
+        return redirect(url_for("admin_reports"))
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE product_reports SET status=%s, admin_id=%s, admin_note=%s, handled_at=NOW() "
+            "WHERE id=%s",
+            (action, session["user_id"], note or None, rid),
+        )
+        if action == "resolved":
+            cur.execute(
+                "UPDATE products SET status='removed', removal_reason=%s, "
+                "removed_by=%s, removed_at=NOW() "
+                "WHERE id=%s AND status IN ('on_sale','removed')",
+                (note or report["reason"], session["user_id"], report["product_id"]),
+            )
+        add_notification(
+            cur,
+            report["reporter_id"],
+            "product_report_handled",
+            "商品举报已处理",
+            "你提交的商品举报已处理，结果：%s。%s" % (REPORT_STATUS[action], note or ""),
+            product_id=report["product_id"],
+            actor_id=session["user_id"],
+        )
+        add_notification(
+            cur,
+            report["seller_id"],
+            "product_report_handled",
+            "商品举报处理结果",
+            "商品《%s》的举报已处理，结果：%s。%s" % (report["title"], REPORT_STATUS[action], note or ""),
+            product_id=report["product_id"],
+            actor_id=session["user_id"],
+        )
+        add_admin_log(cur, "product_report_%s" % action, "product_report", rid, note or report["reason"])
+        if action == "resolved":
+            add_admin_log(cur, "product_remove", "product", report["product_id"], note or report["reason"])
+    flash("商品举报处理完成", "success")
+    return redirect(url_for("admin_reports"))
+
+
+@app.route("/admin/appeals")
+@admin_required()
+def admin_appeals():
+    status_filter = request.args.get("status", "").strip()
+    where_sql = ""
+    params = []
+    if status_filter in APPEAL_STATUS:
+        where_sql = "WHERE a.status=%s "
+        params.append(status_filter)
+    else:
+        status_filter = ""
+    appeals = query_all(
+        "SELECT a.*, o.order_no, o.status AS order_status, p.title AS product_title, "
+        "u.nickname AS appellant_name, bu.nickname AS buyer_name, su.nickname AS seller_name, "
+        "au.nickname AS admin_name "
+        "FROM order_appeals a "
+        "JOIN orders o ON a.order_id = o.id "
+        "JOIN products p ON o.product_id = p.id "
+        "JOIN users u ON a.appellant_id = u.id "
+        "JOIN users bu ON o.buyer_id = bu.id "
+        "JOIN users su ON o.seller_id = su.id "
+        "LEFT JOIN users au ON a.admin_id = au.id "
+        f"{where_sql}"
+        "ORDER BY a.created_at DESC",
+        tuple(params),
+    )
+    counts = {row["status"]: row["c"] for row in query_all(
+        "SELECT status, COUNT(*) AS c FROM order_appeals GROUP BY status"
+    )}
+    return render_template(
+        "admin_appeals.html",
+        appeals=appeals,
+        status_filter=status_filter,
+        counts=counts,
+        APPEAL_STATUS=APPEAL_STATUS,
+    )
+
+
+@app.route("/admin/appeals/<int:aid>/handle", methods=["POST"])
+@admin_required()
+def admin_handle_appeal(aid):
+    action = request.form.get("action")
+    resolution = request.form.get("resolution", "").strip()
+    if action not in ("resolved", "rejected"):
+        abort(400)
+    if not resolution:
+        flash("请填写仲裁说明", "danger")
+        return redirect(url_for("admin_appeals"))
+    if len(resolution) > 255:
+        flash("仲裁说明最多 255 字", "danger")
+        return redirect(url_for("admin_appeals"))
+    appeal = query_one(
+        "SELECT a.*, o.buyer_id, o.seller_id, o.product_id, o.order_no "
+        "FROM order_appeals a JOIN orders o ON a.order_id = o.id WHERE a.id=%s",
+        (aid,),
+    )
+    if not appeal:
+        abort(404)
+    if appeal["status"] != "pending":
+        flash("该申诉已经处理过", "warning")
+        return redirect(url_for("admin_appeals"))
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE order_appeals SET status=%s, admin_id=%s, resolution=%s, handled_at=NOW() "
+            "WHERE id=%s",
+            (action, session["user_id"], resolution, aid),
+        )
+        for user_id in (appeal["buyer_id"], appeal["seller_id"]):
+            add_notification(
+                cur,
+                user_id,
+                "order_appeal_handled",
+                "交易申诉已有仲裁结果",
+                "订单 %s 的申诉结果：%s。%s" % (appeal["order_no"], APPEAL_STATUS[action], resolution),
+                order_id=appeal["order_id"],
+                product_id=appeal["product_id"],
+                actor_id=session["user_id"],
+            )
+        add_admin_log(cur, "order_appeal_%s" % action, "order_appeal", aid, resolution)
+    flash("交易申诉仲裁完成", "success")
+    return redirect(url_for("admin_appeals"))
+
+
+@app.route("/admin/logs")
+@admin_required()
+def admin_logs():
+    logs = query_all(
+        "SELECT l.*, u.nickname AS admin_name "
+        "FROM admin_logs l JOIN users u ON l.admin_id = u.id "
+        "ORDER BY l.created_at DESC LIMIT 100"
+    )
+    return render_template("admin_logs.html", logs=hydrate_admin_logs(logs))
 
 
 @app.route("/admin/products")
@@ -1166,6 +1544,7 @@ def admin_remove_product(pid):
             product_id=pid,
             actor_id=session["user_id"],
         )
+        add_admin_log(cur, "product_remove", "product", pid, reason)
     flash("商品已由管理员下架", "success")
     return redirect(url_for("admin_products"))
 
@@ -1195,6 +1574,7 @@ def admin_restore_product(pid):
             product_id=pid,
             actor_id=session["user_id"],
         )
+        add_admin_log(cur, "product_restore", "product", pid, product["title"])
     flash("商品已恢复上架", "success")
     return redirect(url_for("admin_products"))
 
@@ -1291,6 +1671,14 @@ def admin_update_user_permissions(uid):
             % ("已获得或更新" if make_admin else "已取消"),
             actor_id=session["user_id"],
         )
+        add_admin_log(
+            cur,
+            "admin_permissions_update",
+            "user",
+            uid,
+            "is_admin=%s, products=%s, users=%s, register=%s"
+            % (make_admin, can_manage_products, can_manage_users, can_manage_admin_register),
+        )
     flash("管理员权限已更新", "success")
     return redirect(url_for("admin_users"))
 
@@ -1324,6 +1712,7 @@ def admin_toggle_user_status(uid):
             "你的账号已被%s。" % ("启用" if new_status else "停用"),
             actor_id=session["user_id"],
         )
+        add_admin_log(cur, "user_status_update", "user", uid, "active=%s" % new_status)
     flash("账号状态已更新", "success")
     return redirect(url_for("admin_users"))
 
@@ -1338,6 +1727,13 @@ def admin_settings():
                 "UPDATE app_settings SET setting_value=%s "
                 "WHERE setting_key='admin_registration_enabled'",
                 (enabled,),
+            )
+            add_admin_log(
+                cur,
+                "admin_register_setting",
+                "setting",
+                None,
+                "admin_registration_enabled=%s" % enabled,
             )
         flash("管理员注册权限已更新", "success")
         return redirect(url_for("admin_settings"))
@@ -1641,14 +2037,66 @@ def order_detail(oid):
         "SELECT id FROM reviews WHERE order_id=%s AND reviewer_id=%s",
         (oid, uid),
     )
+    appeals = query_all(
+        "SELECT a.*, u.nickname AS appellant_name, au.nickname AS admin_name "
+        "FROM order_appeals a "
+        "JOIN users u ON a.appellant_id = u.id "
+        "LEFT JOIN users au ON a.admin_id = au.id "
+        "WHERE a.order_id=%s ORDER BY a.created_at DESC",
+        (oid,),
+    )
+    my_pending_appeal = query_one(
+        "SELECT id FROM order_appeals "
+        "WHERE order_id=%s AND appellant_id=%s AND status='pending'",
+        (oid, uid),
+    )
     return render_template(
         "order_detail.html", order=order, payments=payments,
         reviews=reviews, my_review=my_review,
         review_target_id=other_order_user(order, uid),
+        appeals=appeals, my_pending_appeal=my_pending_appeal,
+        APPEAL_STATUS=APPEAL_STATUS,
         payment_deadline=payment_deadline,
         payment_deadline_ms=payment_deadline_ms,
         server_now_ms=int(datetime.now().timestamp() * 1000),
     )
+
+
+@app.route("/order/<int:oid>/appeal", methods=["POST"])
+@login_required
+def create_order_appeal(oid):
+    uid = session["user_id"]
+    reason = request.form.get("reason", "").strip()
+    if not reason:
+        flash("请填写申诉原因", "danger")
+        return redirect(url_for("order_detail", oid=oid))
+    if len(reason) > 255:
+        flash("申诉原因最多 255 字", "danger")
+        return redirect(url_for("order_detail", oid=oid))
+    order = query_one("SELECT * FROM orders WHERE id=%s", (oid,))
+    if not order:
+        abort(404)
+    if uid not in (order["buyer_id"], order["seller_id"]):
+        abort(403)
+    if order["status"] not in ("paid", "shipped", "refund_requested", "completed"):
+        flash("当前订单状态不适合发起交易申诉", "warning")
+        return redirect(url_for("order_detail", oid=oid))
+    existing = query_one(
+        "SELECT id FROM order_appeals "
+        "WHERE order_id=%s AND appellant_id=%s AND status='pending'",
+        (oid, uid),
+    )
+    if existing:
+        flash("你已经提交过待处理申诉，请等待管理员仲裁", "warning")
+        return redirect(url_for("order_detail", oid=oid))
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "INSERT INTO order_appeals (order_id, appellant_id, reason) "
+            "VALUES (%s, %s, %s)",
+            (oid, uid, reason),
+        )
+    flash("申诉已提交，管理员会结合订单记录进行仲裁", "success")
+    return redirect(url_for("order_detail", oid=oid))
 
 
 @app.route("/order/<int:oid>/pay", methods=["POST"])

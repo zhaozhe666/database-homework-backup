@@ -6,12 +6,6 @@
     <h2 class="page-title">订单管理</h2>
     <p class="admin-subtitle">查看全站订单状态、买卖双方和交易金额。</p>
   </div>
-  <div class="admin-tabs">
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
-    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
-    {% if current_user.admin.can_manage_users %}<a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">用户管理</a>{% endif %}
-    {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
-  </div>
 </div>
 
 <form class="admin-searchbar" action="{{ url_for('admin_orders') }}" method="get">

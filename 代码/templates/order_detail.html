@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}订单详情 · 二手集市{% endblock %}
+{% block title %}订单详情 - 二手集市{% endblock %}
 {% block content %}
 {% set is_buyer = current_user.id == order.buyer_id %}
 {% set is_seller = current_user.id == order.seller_id %}
@@ -52,6 +52,11 @@
   {% endif %}
 
   <div class="order-actions">
+    {% if is_buyer %}
+      <a class="btn-outline" href="{{ url_for('my_messages', with_user=order.seller_id) }}">联系卖家</a>
+    {% elif is_seller %}
+      <a class="btn-outline" href="{{ url_for('my_messages', with_user=order.buyer_id) }}">联系买家</a>
+    {% endif %}
     {% if order.status == 'created' and is_buyer %}
       <p class="own-tip">请在 10 分钟内付款，超时订单会自动取消。</p>
       <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" style="display:inline">
@@ -114,6 +119,39 @@
       <p class="own-tip">退款已完成，商品已恢复在售。</p>
     {% endif %}
   </div>
+
+  {% if order.status in ('paid','shipped','refund_requested','completed') and (is_buyer or is_seller) %}
+  <section class="workflow-panel">
+    <h3>交易申诉</h3>
+    {% if my_pending_appeal %}
+      <p class="own-tip">你已有一条待处理申诉，管理员会结合聊天、退款和订单记录仲裁。</p>
+    {% else %}
+      <form action="{{ url_for('create_order_appeal', oid=order.id) }}" method="post" class="refund-form">
+        {{ csrf_field() }}
+        <input type="text" name="reason" maxlength="255" placeholder="申诉原因，例如商品不符、发货争议、退款协商无果">
+        <button class="btn-outline" type="submit">提交申诉</button>
+      </form>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if appeals %}
+  <section class="workflow-panel">
+    <h3>申诉记录</h3>
+    <table>
+      <tr><th>发起人</th><th>原因</th><th>状态</th><th>处理结果</th><th>时间</th></tr>
+      {% for appeal in appeals %}
+      <tr>
+        <td>{{ appeal.appellant_name }}</td>
+        <td>{{ appeal.reason }}</td>
+        <td>{{ APPEAL_STATUS[appeal.status] }}</td>
+        <td>{{ appeal.resolution or '-' }}</td>
+        <td>{{ appeal.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
 
   {% if payments %}
   <div class="pay-list">

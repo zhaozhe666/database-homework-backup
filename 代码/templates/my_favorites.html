@@ -32,6 +32,7 @@
     </a>
     <form action="{{ url_for('unfavorite_product', pid=p.id) }}" method="post" class="favorite-card-action">
       {{ csrf_field() }}
+      <input type="hidden" name="from_page" value="favorites">
       <button type="submit" class="btn-outline btn-xs">取消收藏</button>
     </form>
   </article>

@@ -55,7 +55,7 @@ def seed_data():
         ("alice", "123456", "爱丽丝", "13800000001", 5000.00),
         ("bob", "123456", "小波", "13800000002", 5000.00),
         ("carol", "123456", "卡罗尔", "13800000003", 5000.00),
-        ("admin", "admin123", "平台管理员", "13800000000", 0.00),
+        ("admin", "admin", "平台管理员", "13800000000", 0.00),
     ]
     # 商品： seller_username, category_name, title, desc, price, condition, image
     products = [
@@ -139,7 +139,7 @@ def seed_data():
         conn.close()
     print("[OK] 演示用户与商品写入完成")
     print("     演示账号： alice / bob / carol  密码均为 123456")
-    print("     管理员： admin / admin123")
+    print("     管理员： admin / admin")
 
 
 if __name__ == "__main__":

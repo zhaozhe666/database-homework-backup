@@ -3,12 +3,6 @@
 {% block content %}
 <div class="admin-head">
   <h2 class="page-title">用户管理</h2>
-  <div class="admin-tabs">
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_dashboard') }}">后台首页</a>
-    {% if current_user.admin.can_manage_products %}<a class="btn-outline btn-xs" href="{{ url_for('admin_products') }}">商品管理</a>{% endif %}
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_orders') }}">订单管理</a>
-    {% if current_user.admin.can_manage_admin_register %}<a class="btn-outline btn-xs" href="{{ url_for('admin_settings') }}">系统设置</a>{% endif %}
-  </div>
 </div>
 
 <form class="admin-searchbar" action="{{ url_for('admin_users') }}" method="get">

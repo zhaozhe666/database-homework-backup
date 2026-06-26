@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}商品举报 - 二手集市{% endblock %}
+{% block content %}
+<div class="admin-head">
+  <div>
+    <h2 class="page-title">商品举报</h2>
+    <p class="admin-subtitle">核实用户举报，必要时下架商品并留下处理说明。</p>
+  </div>
+</div>
+
+<div class="admin-filterbar">
+  <a class="{{ 'active' if not status_filter else '' }}" href="{{ url_for('admin_reports') }}">全部</a>
+  {% for key, label in REPORT_STATUS.items() %}
+    <a class="{{ 'active' if status_filter == key else '' }}" href="{{ url_for('admin_reports', status=key) }}">
+      {{ label }} <span>{{ counts.get(key, 0) }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+{% if reports %}
+<table class="list-table admin-table">
+  <tr>
+    <th>商品</th><th>举报人</th><th>卖家</th><th>原因</th><th>状态</th><th>处理</th>
+  </tr>
+  {% for report in reports %}
+  <tr>
+    <td>
+      <a href="{{ url_for('product_detail', pid=report.product_id) }}">{{ report.product_title }}</a>
+      <div class="muted">{{ report.created_at }}</div>
+    </td>
+    <td>{{ report.reporter_name }}</td>
+    <td>{{ report.seller_name }}</td>
+    <td>{{ report.reason }}</td>
+    <td>
+      <span class="status">{{ REPORT_STATUS[report.status] }}</span>
+      {% if report.admin_note %}<div class="muted">{{ report.admin_note }}</div>{% endif %}
+    </td>
+    <td>
+      {% if report.status == 'pending' %}
+        <form action="{{ url_for('admin_handle_report', rid=report.id) }}" method="post" class="admin-inline-form">
+          {{ csrf_field() }}
+          <input type="text" name="note" maxlength="255" placeholder="处理说明">
+          <button class="btn-outline btn-success btn-xs" name="action" value="resolved" type="submit">成立</button>
+          <button class="btn-outline btn-danger btn-xs" name="action" value="rejected" type="submit">不成立</button>
+        </form>
+      {% else %}
+        <span class="muted">{{ report.admin_name or '-' }} · {{ report.handled_at or '-' }}</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+  <div class="empty">暂无商品举报。</div>
+{% endif %}
+{% endblock %}

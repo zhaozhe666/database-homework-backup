@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ product.title }} · 二手集市{% endblock %}
+{% block title %}{{ product.title }} - 二手集市{% endblock %}
 {% block content %}
 {% set images = product.images if product.images is defined else image_urls(product.image_url) %}
 <div class="detail">
@@ -19,6 +19,7 @@
       <div class="no-img big">暂无图片</div>
     {% endif %}
   </div>
+
   <div class="detail-info">
     <h1>{{ product.title }}</h1>
     <div class="detail-price">¥{{ '%.2f'|format(product.price) }}</div>
@@ -37,12 +38,14 @@
         {% endif %}
       </li>
     </ul>
+
     {% if product.status == 'removed' and product.removal_reason and current_user and (current_user.id == product.seller_id or current_user.is_admin) %}
       <div class="removed-notice">
         <b>下架原因：</b>{{ product.removal_reason }}
       </div>
     {% endif %}
-    <div class="detail-desc">{{ product.description or '卖家很懒，没有填写描述。' }}</div>
+
+    <div class="detail-desc">{{ product.description or '卖家暂未填写描述。' }}</div>
 
     <div class="detail-actions">
       {% if current_user and current_user.id != product.seller_id %}
@@ -85,6 +88,11 @@
         <textarea name="content" rows="3" maxlength="500" placeholder="想问卖家什么？比如成色细节、取货地点、是否可小刀"></textarea>
         <button type="submit" class="btn-outline">联系卖家</button>
       </form>
+      <form action="{{ url_for('report_product', pid=product.id) }}" method="post" class="message-form">
+        {{ csrf_field() }}
+        <textarea name="reason" rows="2" maxlength="255" placeholder="举报原因，例如虚假描述、违禁商品、价格异常等"></textarea>
+        <button type="submit" class="btn-outline btn-danger">举报商品</button>
+      </form>
     {% endif %}
   </div>
 </div>
@@ -105,6 +113,7 @@
   </div>
 </section>
 {% endif %}
+
 {% if images|length > 1 %}
 <script>
   const mainImage = document.querySelector(".detail-main-img");

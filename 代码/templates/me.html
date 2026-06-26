@@ -1,14 +1,19 @@
 {% extends "base.html" %}
-{% block title %}个人中心 · 二手集市{% endblock %}
+{% block title %}个人中心 - 二手集市{% endblock %}
 {% block content %}
-<div class="me-head">
-  <div class="me-avatar">{{ current_user.nickname[0] }}</div>
-  <div>
-    <h2>{{ current_user.nickname }}</h2>
-    <p class="me-sub">账号：{{ current_user.username }} · 手机：{{ current_user.phone or '未填写' }}</p>
+{% set overview_total = selling_cnt + bought_cnt + sold_cnt + favorite_cnt + unread_message_cnt %}
+{% if overview_total < 1 %}{% set overview_total = 1 %}{% endif %}
+<div class="me-hero">
+  <div class="me-identity">
+    <div class="me-avatar">{{ current_user.nickname[:1] }}</div>
+    <div>
+      <h2>{{ current_user.nickname }}</h2>
+      <p class="me-sub">账号：{{ current_user.username }} · 手机：{{ current_user.phone or '未填写' }}</p>
+    </div>
   </div>
   <div class="me-wallet">
-    <div class="wallet-amt">¥{{ '%.2f'|format(current_user.balance) }}</div>
+    <span>钱包余额</span>
+    <strong>¥{{ '%.2f'|format(current_user.balance) }}</strong>
     <div class="me-actions">
       <a class="btn-sm" href="{{ url_for('recharge') }}">充值</a>
       <a class="btn-outline btn-xs" href="{{ url_for('profile') }}">账号设置</a>
@@ -16,27 +21,67 @@
   </div>
 </div>
 
-<div class="me-grid">
+<section class="me-overview">
+  <div class="section-row">
+    <div>
+      <h2 class="section-title">我的交易概览</h2>
+      <p class="muted">把买、卖、收藏和消息放在一张图里看。</p>
+    </div>
+    <a class="btn-outline btn-xs" href="{{ url_for('publish') }}">发布闲置</a>
+  </div>
+  <div class="me-bars">
+    <a href="{{ url_for('my_selling') }}" class="me-bar-row">
+      <span class="me-bar-icon">货</span>
+      <span class="me-bar-label">在售商品</span>
+      <span class="me-bar-track"><i style="width: {{ (selling_cnt / overview_total * 100)|round(0, 'floor') }}%"></i></span>
+      <strong>{{ selling_cnt }}</strong>
+    </a>
+    <a href="{{ url_for('my_bought') }}" class="me-bar-row">
+      <span class="me-bar-icon blue">买</span>
+      <span class="me-bar-label">我买到的</span>
+      <span class="me-bar-track"><i style="width: {{ (bought_cnt / overview_total * 100)|round(0, 'floor') }}%"></i></span>
+      <strong>{{ bought_cnt }}</strong>
+    </a>
+    <a href="{{ url_for('my_sold') }}" class="me-bar-row">
+      <span class="me-bar-icon green">卖</span>
+      <span class="me-bar-label">我卖出的</span>
+      <span class="me-bar-track"><i style="width: {{ (sold_cnt / overview_total * 100)|round(0, 'floor') }}%"></i></span>
+      <strong>{{ sold_cnt }}</strong>
+    </a>
+    <a href="{{ url_for('my_favorites') }}" class="me-bar-row">
+      <span class="me-bar-icon amber">藏</span>
+      <span class="me-bar-label">我的收藏</span>
+      <span class="me-bar-track"><i style="width: {{ (favorite_cnt / overview_total * 100)|round(0, 'floor') }}%"></i></span>
+      <strong>{{ favorite_cnt }}</strong>
+    </a>
+  </div>
+</section>
+
+<div class="me-grid me-action-grid">
   <a class="me-card" href="{{ url_for('my_selling') }}">
-    <div class="num">{{ selling_cnt }}</div><div>在售商品</div>
+    <span class="me-card-icon">货</span>
+    <div class="num">{{ selling_cnt }}</div>
+    <div>在售商品</div>
+    <small>管理发布和上下架</small>
   </a>
   <a class="me-card" href="{{ url_for('my_bought') }}">
-    <div class="num">{{ bought_cnt }}</div><div>我买到的</div>
+    <span class="me-card-icon blue">买</span>
+    <div class="num">{{ bought_cnt }}</div>
+    <div>我买到的</div>
+    <small>查看付款、退款和申诉</small>
   </a>
   <a class="me-card" href="{{ url_for('my_sold') }}">
-    <div class="num">{{ sold_cnt }}</div><div>我卖出的</div>
+    <span class="me-card-icon green">卖</span>
+    <div class="num">{{ sold_cnt }}</div>
+    <div>我卖出的</div>
+    <small>处理发货和售后</small>
   </a>
-  <a class="me-card" href="{{ url_for('my_favorites') }}">
-    <div class="num">{{ favorite_cnt }}</div><div>我的收藏</div>
-  </a>
-  <a class="me-card me-message-card" href="{{ url_for('my_messages') }}">
-    {% if unread_message_cnt %}
-      <span class="me-unread-badge">{{ unread_message_cnt }}</span>
-    {% endif %}
-    <div class="num">信</div><div>信息</div>
-  </a>
-  <a class="me-card" href="{{ url_for('publish') }}">
-    <div class="num">＋</div><div>发布闲置</div>
+  <a class="me-card" href="{{ url_for('my_messages') }}">
+    {% if unread_message_cnt %}<span class="me-unread-badge">{{ unread_message_cnt }}</span>{% endif %}
+    <span class="me-card-icon dark">信</span>
+    <div class="num">{{ unread_message_cnt }}</div>
+    <div>我的消息</div>
+    <small>买卖沟通记录</small>
   </a>
 </div>
 {% endblock %}

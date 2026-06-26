@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}操作日志 - 二手集市{% endblock %}
+{% block content %}
+<div class="admin-head">
+  <div>
+    <h2 class="page-title">管理员操作日志</h2>
+    <p class="admin-subtitle">用事件流追踪每一次下架、仲裁、举报处理和权限变更。</p>
+  </div>
+</div>
+
+{% if logs %}
+<div class="log-timeline">
+  {% for log in logs %}
+  <article class="log-event">
+    <div class="log-dot"></div>
+    <div class="log-card">
+      <div class="log-card-head">
+        <div>
+          <strong>{{ log.action_label }}</strong>
+          <span>{{ log.admin_name }} · {{ log.created_at }}</span>
+        </div>
+        <span class="log-action-chip">{{ log.target_type }}</span>
+      </div>
+      <div class="log-target">
+        <span>对象</span>
+        {% if log.target_url %}
+          <a href="{{ log.target_url }}">{{ log.target_label }}</a>
+        {% else %}
+          <b>{{ log.target_label }}</b>
+        {% endif %}
+      </div>
+      <p>{{ log.detail or '暂无补充说明' }}</p>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+  <div class="empty">暂无管理员操作日志。</div>
+{% endif %}
+{% endblock %}
