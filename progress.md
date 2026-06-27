@@ -731,3 +731,23 @@
 - `代码/templates/my_orders.html`：在订单页顶部增加买入/卖出切换标签和待发货数量提示。
 - `progress.md`：追加本轮修复与验证记录。
 - 回滚方式：还原上述两个文件中本轮关于 `pending_ship_count` 和 `admin-status-tabs` 订单切换的改动。
+
+## 2026-06-27 - Task: 增加七天未发货自动取消和提醒分类
+### What was done
+- 增加 7 天未发货规则：订单付款后超过 7 天仍未发货时，系统自动取消订单、退款给买家，并将商品下架。
+- 自动处理会同步写退款流水，清理卖家的待发货任务提醒，并分别通知买家和卖家。
+- 订单详情页显示发货截止时间和剩余时间，并提示买卖双方超时规则。
+- 提醒中心增加分类标签：全部、未读、交易提醒、待处理、系统通知、已读。
+- 待发货提醒中展示发货截止时间和剩余时间。
+### Testing
+- 通过：`.venv\Scripts\python.exe -m py_compile app.py _verify.py _smoke.py`。
+- 通过：Flask test client 访问 `/me/notifications`、`/me/notifications?category=tasks`、`trade`、`system`、`/me/bought`、`/me/sold` 均返回 200，且无未渲染模板标记。
+- 通过：`.venv\Scripts\python.exe _verify.py`，新增验证已付款超过 7 天未发货订单会自动取消、退款、商品下架，并生成退款流水和双方通知。
+- 通过：`.venv\Scripts\python.exe _smoke.py` 完整回归。
+### Notes
+- `代码/app.py`：增加发货超时常量、剩余时间格式化、自动取消未发货订单处理、订单详情发货截止数据、提醒中心分类筛选。
+- `代码/templates/order_detail.html`：展示发货截止时间和 7 天发货规则提示。
+- `代码/templates/notifications.html`：增加提醒分类标签和待发货截止时间展示。
+- `代码/_verify.py`：补充 7 天未发货自动取消、退款、下架和通知的验证场景。
+- `progress.md`：追加本轮修复与验证记录。
+- 回滚方式：回滚本次提交即可恢复；如手动回滚，移除上述文件中关于 `ORDER_SHIP_TIMEOUT_DAYS`、`cancel_overdue_unshipped_orders`、提醒分类和发货截止展示的改动。

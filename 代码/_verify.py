@@ -428,6 +428,42 @@ assert refund_order["status"] == "refunded"
 assert db.query_one("SELECT status FROM products WHERE id=%s", (pid,))["status"] == "on_sale"
 client.get("/logout")
 
+# Paid orders older than 7 days without shipment should be cancelled, refunded, and removed.
+post("/login", username=buyer["username"], password="pass1234")
+post("/order/create", product_id=str(reject_refund_pid), address="Ship timeout address")
+ship_timeout_oid = latest_order_id(reject_refund_pid)
+post(f"/order/{ship_timeout_oid}/pay", payment_password="111111")
+balance_before_ship_timeout = db.query_one(
+    "SELECT balance FROM users WHERE username=%s", (buyer["username"],)
+)["balance"]
+db.execute(
+    "UPDATE orders SET paid_at=DATE_SUB(NOW(), INTERVAL 8 DAY) WHERE id=%s",
+    (ship_timeout_oid,),
+)
+client.get("/")
+ship_timeout_order = db.query_one(
+    "SELECT status, refunded_at, refund_reason, amount FROM orders WHERE id=%s",
+    (ship_timeout_oid,),
+)
+print("Ship timeout order status =", ship_timeout_order["status"])
+assert ship_timeout_order["status"] == "cancelled"
+assert ship_timeout_order["refunded_at"] is not None
+assert ship_timeout_order["refund_reason"]
+assert db.query_one("SELECT status FROM products WHERE id=%s", (reject_refund_pid,))["status"] == "removed"
+assert db.query_one(
+    "SELECT COUNT(*) c FROM payments WHERE order_id=%s AND status='refunded'",
+    (ship_timeout_oid,),
+)["c"] == 1
+balance_after_ship_timeout = db.query_one(
+    "SELECT balance FROM users WHERE username=%s", (buyer["username"],)
+)["balance"]
+assert balance_after_ship_timeout == balance_before_ship_timeout + ship_timeout_order["amount"]
+assert db.query_one(
+    "SELECT COUNT(*) c FROM notifications WHERE order_id=%s AND notice_type='order_ship_timeout_cancelled'",
+    (ship_timeout_oid,),
+)["c"] == 2
+client.get("/logout")
+
 # 再走一笔完整交易，确认原有支付、收货、评价流程没有被退款逻辑影响。
 post("/login", username=buyer["username"], password="pass1234")
 post("/order/create", product_id=str(pid), address="松园3栋")
@@ -487,7 +523,7 @@ print("首页状态码 =", client.get("/").status_code)
 print("商品详情状态码 =", client.get(f"/product/{pid}").status_code)
 
 # 清理测试数据。
-for oid in [timeout_oid, refund_oid, cancel_refund_oid, reject_refund_oid, complete_oid]:
+for oid in [timeout_oid, refund_oid, cancel_refund_oid, reject_refund_oid, ship_timeout_oid, complete_oid]:
     db.execute("DELETE FROM reviews WHERE order_id=%s", (oid,))
     db.execute("DELETE FROM payments WHERE order_id=%s", (oid,))
     db.execute("DELETE FROM orders WHERE id=%s", (oid,))

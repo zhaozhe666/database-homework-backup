@@ -32,6 +32,7 @@
     <li><b>下单时间：</b>{{ order.created_at }}</li>
     {% if payment_deadline %}<li><b>付款截止：</b>{{ payment_deadline }}</li>{% endif %}
     {% if order.paid_at %}<li><b>支付时间：</b>{{ order.paid_at }}</li>{% endif %}
+    {% if shipment_deadline %}<li><b>发货截止：</b>{{ shipment_deadline }}（剩余 {{ shipment_remaining }}）</li>{% endif %}
     {% if order.shipped_at %}<li><b>发货时间：</b>{{ order.shipped_at }}</li>{% endif %}
     {% if order.refund_requested_at %}<li><b>申请退款：</b>{{ order.refund_requested_at }}</li>{% endif %}
     {% if order.refunded_at %}<li><b>退款时间：</b>{{ order.refunded_at }}</li>{% endif %}
@@ -77,6 +78,7 @@
       </form>
     {% endif %}
     {% if order.status == 'paid' and is_buyer %}
+      <p class="own-tip">卖家需在 {{ order_ship_timeout_days }} 天内发货，超时系统将自动退款。</p>
       <form action="{{ url_for('request_refund', oid=order.id) }}" method="post" class="refund-form">
         {{ csrf_field() }}
         <input type="text" name="reason" maxlength="255" placeholder="申请退款原因（选填）">
@@ -84,7 +86,7 @@
       </form>
     {% endif %}
     {% if order.status == 'paid' and is_seller %}
-      <p class="own-tip">买家已付款（平台托管中），请发货后点击已发货。</p>
+      <p class="own-tip">买家已付款（平台托管中），请在 {{ order_ship_timeout_days }} 天内发货；超时系统将自动取消订单、退款并下架商品。</p>
       <form action="{{ url_for('ship_order', oid=order.id) }}" method="post" style="display:inline">
         {{ csrf_field() }}
         <button class="btn-primary" onclick="return confirm('确定已经发货了吗？');">已发货</button>

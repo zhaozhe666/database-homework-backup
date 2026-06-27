@@ -40,6 +40,7 @@ MAX_PRODUCT_IMAGES = 4
 IMAGE_URL_SEPARATOR = "|"
 RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
+ORDER_SHIP_TIMEOUT_DAYS = 7
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FIELD_NAME = "_csrf_token"
 PHONE_CHANGE_STEP_KEY = "phone_change_step"
@@ -160,6 +161,26 @@ def safe_redirect_target(default_endpoint="index"):
 
 def current_timestamp():
     return int(datetime.now().timestamp())
+
+
+def format_remaining_time(deadline, now=None):
+    if not deadline:
+        return ""
+    now = now or datetime.now()
+    seconds = int((deadline - now).total_seconds())
+    if seconds <= 0:
+        return "已超时"
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes = remainder // 60
+    parts = []
+    if days:
+        parts.append("%d天" % days)
+    if hours:
+        parts.append("%d小时" % hours)
+    if not parts:
+        parts.append("%d分钟" % max(minutes, 1))
+    return "".join(parts)
 
 
 def clear_phone_change_state():
@@ -720,6 +741,64 @@ def cancel_expired_unpaid_orders():
             )
 
 
+
+def cancel_overdue_unshipped_orders():
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "SELECT o.*, p.title "
+            "FROM orders o JOIN products p ON p.id=o.product_id "
+            "WHERE o.status='paid' "
+            "AND o.paid_at IS NOT NULL "
+            "AND o.paid_at <= DATE_SUB(NOW(), INTERVAL %s DAY) "
+            "FOR UPDATE",
+            (ORDER_SHIP_TIMEOUT_DAYS,),
+        )
+        overdue_orders = cur.fetchall()
+        for order in overdue_orders:
+            cur.execute(
+                "UPDATE orders SET status='cancelled', cancelled_at=NOW(), refunded_at=NOW(), "
+                "refund_reason=%s, refund_requested_at=NULL "
+                "WHERE id=%s AND status='paid'",
+                ("\u5356\u5bb6\u8d85\u8fc7 %d \u5929\u672a\u53d1\u8d27\uff0c\u7cfb\u7edf\u81ea\u52a8\u53d6\u6d88\u5e76\u9000\u6b3e" % ORDER_SHIP_TIMEOUT_DAYS, order["id"]),
+            )
+            if cur.rowcount != 1:
+                continue
+            cur.execute(
+                "UPDATE products SET status='removed', removal_reason=%s, "
+                "removed_by=NULL, removed_at=NOW() WHERE id=%s",
+                ("\u5356\u5bb6\u8d85\u8fc7 %d \u5929\u672a\u53d1\u8d27\uff0c\u7cfb\u7edf\u81ea\u52a8\u4e0b\u67b6" % ORDER_SHIP_TIMEOUT_DAYS, order["product_id"]),
+            )
+            cur.execute(
+                "UPDATE users SET balance = balance + %s WHERE id=%s",
+                (order["amount"], order["buyer_id"]),
+            )
+            cur.execute(
+                "INSERT INTO payments (order_id, amount, method, status) "
+                "VALUES (%s, %s, 'balance', 'refunded')",
+                (order["id"], order["amount"]),
+            )
+            mark_order_notifications_read(cur, order["seller_id"], order["id"], ("order_paid",))
+            add_notification(
+                cur,
+                order["buyer_id"],
+                "order_ship_timeout_cancelled",
+                "\u5356\u5bb6\u8d85\u65f6\u672a\u53d1\u8d27\uff0c\u8ba2\u5355\u5df2\u53d6\u6d88",
+                "\u8ba2\u5355 %s \u8d85\u8fc7 %d \u5929\u672a\u53d1\u8d27\uff0c\u7cfb\u7edf\u5df2\u53d6\u6d88\u8ba2\u5355\u5e76\u9000\u56de\u4f59\u989d\u3002"
+                % (order["order_no"], ORDER_SHIP_TIMEOUT_DAYS),
+                order_id=order["id"],
+                product_id=order["product_id"],
+            )
+            add_notification(
+                cur,
+                order["seller_id"],
+                "order_ship_timeout_cancelled",
+                "\u8d85\u65f6\u672a\u53d1\u8d27\uff0c\u8ba2\u5355\u5df2\u53d6\u6d88",
+                "\u8ba2\u5355 %s \u8d85\u8fc7 %d \u5929\u672a\u53d1\u8d27\uff0c\u7cfb\u7edf\u5df2\u53d6\u6d88\u8ba2\u5355\u3001\u9000\u6b3e\u7ed9\u4e70\u5bb6\uff0c\u5e76\u4e0b\u67b6\u5546\u54c1\u300a%s\u300b\u3002"
+                % (order["order_no"], ORDER_SHIP_TIMEOUT_DAYS, order["title"]),
+                order_id=order["id"],
+                product_id=order["product_id"],
+            )
+
 def ensure_runtime_schema():
     """兼容已经初始化过的旧数据库：补建新表，并迁移旧 image_url。"""
     global RUNTIME_SCHEMA_READY
@@ -1007,6 +1086,7 @@ def prepare_runtime_schema():
     validate_csrf_token()
     if request.endpoint in EXPIRED_ORDER_REFRESH_ENDPOINTS:
         cancel_expired_unpaid_orders()
+        cancel_overdue_unshipped_orders()
 
 
 # --------------------------------------------------------------------- #
@@ -2119,9 +2199,14 @@ def order_detail(oid):
     order = hydrate_product_images([order])[0]
     payment_deadline = None
     payment_deadline_ms = None
+    shipment_deadline = None
+    shipment_remaining = ""
     if order["status"] == "created" and order.get("created_at"):
         payment_deadline = order["created_at"] + timedelta(minutes=ORDER_PAYMENT_TIMEOUT_MINUTES)
         payment_deadline_ms = int(payment_deadline.timestamp() * 1000)
+    if order["status"] == "paid" and order.get("paid_at"):
+        shipment_deadline = order["paid_at"] + timedelta(days=ORDER_SHIP_TIMEOUT_DAYS)
+        shipment_remaining = format_remaining_time(shipment_deadline)
     payments = query_all("SELECT * FROM payments WHERE order_id=%s ORDER BY id", (oid,))
     reviews = query_all(
         "SELECT r.*, ru.nickname AS reviewer_name, tu.nickname AS target_name "
@@ -2156,6 +2241,9 @@ def order_detail(oid):
         APPEAL_STATUS=APPEAL_STATUS,
         payment_deadline=payment_deadline,
         payment_deadline_ms=payment_deadline_ms,
+        shipment_deadline=shipment_deadline,
+        shipment_remaining=shipment_remaining,
+        order_ship_timeout_days=ORDER_SHIP_TIMEOUT_DAYS,
         payment_password_set=bool(current_user().get("payment_password_hash")) if uid == order["buyer_id"] else True,
         server_now_ms=int(datetime.now().timestamp() * 1000),
     )
@@ -2885,16 +2973,55 @@ def my_messages():
 @login_required
 def my_notifications():
     uid = session["user_id"]
-    unread_conversations = build_unread_message_conversations(uid)
+    category = request.args.get("category", "all").strip()
+    notification_tabs = [
+        ("all", "全部"),
+        ("unread", "未读"),
+        ("trade", "交易提醒"),
+        ("tasks", "待处理"),
+        ("system", "系统通知"),
+        ("read", "已读"),
+    ]
+    if category not in {key for key, _label in notification_tabs}:
+        category = "all"
+    show_tasks = category in ("all", "tasks")
+    show_unread_messages = category in ("all", "unread")
+    unread_conversations = build_unread_message_conversations(uid) if show_unread_messages else []
+    event_where = [
+        "n.user_id=%s",
+        "NOT (n.notice_type IN ('order_paid','refund_requested') AND n.actor_id IS NOT NULL)",
+    ]
+    event_params = [uid]
+    if category == "unread":
+        event_where.append("n.is_read=0")
+    elif category == "read":
+        event_where.append("n.is_read=1")
+    elif category == "trade":
+        event_where.append(
+            "n.notice_type IN ("
+            "'order_created','order_paid','order_shipped','order_completed',"
+            "'refund_requested','refund_cancelled','refund_approved','refund_rejected',"
+            "'order_timeout_cancelled','order_ship_timeout_cancelled','order_cancelled'"
+            ")"
+        )
+    elif category == "system":
+        event_where.append(
+            "n.notice_type NOT IN ("
+            "'order_created','order_paid','order_shipped','order_completed',"
+            "'refund_requested','refund_cancelled','refund_approved','refund_rejected',"
+            "'order_timeout_cancelled','order_ship_timeout_cancelled','order_cancelled'"
+            ")"
+        )
+    elif category == "tasks":
+        event_where.append("1=0")
     event_notifications = query_all(
         "SELECT n.*, p.title AS product_title, o.order_no "
         "FROM notifications n "
         "LEFT JOIN products p ON n.product_id = p.id "
         "LEFT JOIN orders o ON n.order_id = o.id "
-        "WHERE n.user_id=%s "
-        "AND NOT (n.notice_type IN ('order_paid','refund_requested') AND n.actor_id IS NOT NULL) "
+        "WHERE " + " AND ".join(event_where) + " "
         "ORDER BY n.is_read ASC, n.created_at DESC LIMIT 50",
-        (uid,),
+        tuple(event_params),
     )
     shipment_orders = query_all(
         "SELECT o.*, p.title, bu.nickname AS buyer_name "
@@ -2904,7 +3031,12 @@ def my_notifications():
         "WHERE o.seller_id=%s AND o.status='paid' "
         "ORDER BY o.paid_at DESC, o.created_at DESC LIMIT 20",
         (uid,),
-    )
+    ) if show_tasks else []
+    now = datetime.now()
+    for order in shipment_orders:
+        if order.get("paid_at"):
+            order["shipment_deadline"] = order["paid_at"] + timedelta(days=ORDER_SHIP_TIMEOUT_DAYS)
+            order["shipment_remaining"] = format_remaining_time(order["shipment_deadline"], now)
     refund_orders = query_all(
         "SELECT o.*, p.title, bu.nickname AS buyer_name "
         "FROM orders o "
@@ -2913,13 +3045,15 @@ def my_notifications():
         "WHERE o.seller_id=%s AND o.status='refund_requested' "
         "ORDER BY o.refund_requested_at DESC, o.created_at DESC LIMIT 20",
         (uid,),
-    )
+    ) if show_tasks else []
     return render_template(
         "notifications.html",
         event_notifications=event_notifications,
         unread_conversations=unread_conversations,
         shipment_orders=shipment_orders,
         refund_orders=refund_orders,
+        category=category,
+        notification_tabs=notification_tabs,
     )
 
 

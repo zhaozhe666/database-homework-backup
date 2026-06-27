@@ -14,6 +14,12 @@
   {% endif %}
 </div>
 
+<div class="admin-filterbar admin-status-tabs">
+  {% for key, label in notification_tabs %}
+    <a class="{{ 'active' if category == key else '' }}" href="{{ url_for('my_notifications', category=key) }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
 {% if event_notifications or unread_conversations or shipment_orders or refund_orders %}
 <div class="notification-list">
   {% for notice in event_notifications %}
@@ -64,6 +70,7 @@
       <div>
         <div class="notification-title">待处理：{{ order.buyer_name }} 已付款，等待发货 <span class="status-pill task">待处理</span></div>
         <p>订单《{{ order.title }}》金额 ¥{{ '%.2f'|format(order.amount) }}，请进入订单点击“已发货”。</p>
+        {% if order.shipment_deadline %}<p class="notification-meta">发货截止：{{ order.shipment_deadline }}，剩余 {{ order.shipment_remaining }}</p>{% endif %}
         <small>{{ order.paid_at or order.created_at }}</small>
       </div>
     </a>
