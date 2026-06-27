@@ -103,6 +103,11 @@ echo Database connection is OK.
 echo.
 
 echo [4/4] Starting website...
+echo Checking whether port 5000 is occupied by an old local server...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$connections = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; foreach ($conn in $connections) { $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue; if ($proc -and $proc.ProcessName -like 'python*') { Write-Host ('Stopping old python server on port 5000, PID=' + $proc.Id); Stop-Process -Id $proc.Id -Force } }"
+if errorlevel 1 (
+    echo Port check failed. If the website still shows old pages, close the old server window and run this script again.
+)
 echo Browser will open: http://127.0.0.1:5000
 echo Press Ctrl+C in this window to stop the website.
 echo.
