@@ -14,7 +14,7 @@ CREATE TABLE users (
   id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username      VARCHAR(50)  NOT NULL COMMENT '登录账号',
   password_hash VARCHAR(255) NOT NULL COMMENT '加密后的密码',
-  payment_password_hash VARCHAR(255) NOT NULL COMMENT '支付密码哈希',
+  payment_password_hash VARCHAR(255) DEFAULT NULL COMMENT '支付密码哈希',
   nickname      VARCHAR(50)  NOT NULL COMMENT '昵称',
   phone         VARCHAR(20)  DEFAULT NULL COMMENT '联系电话',
   balance       DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '钱包余额',

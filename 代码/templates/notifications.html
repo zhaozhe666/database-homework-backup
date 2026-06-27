@@ -25,7 +25,7 @@
       <div>
         <div class="notification-title">
           {{ notice.title }}
-          {% if not notice.is_read %}<span class="status-pill">未读</span>{% endif %}
+          <span class="status-pill">{{ '已读' if notice.is_read else '未读' }}</span>
         </div>
         {% if notice.content %}<p>{{ notice.content }}</p>{% endif %}
         {% if notice.order_no or notice.product_title %}
@@ -42,7 +42,9 @@
   {% endfor %}
 
   {% for conversation in unread_conversations %}
-    <a class="notification-item unread" href="{{ url_for('my_messages', with_user=conversation.other_user_id) }}">
+    <form class="notification-form" method="post" action="{{ url_for('open_unread_conversation', other_id=conversation.other_user_id) }}">
+      {{ csrf_field() }}
+    <button class="notification-item unread" type="submit">
       <span class="notification-dot"></span>
       <div>
         <div class="notification-title">{{ conversation.sender_name }} 发来新消息{% if conversation.unread_count > 1 %}（{{ conversation.unread_count }} 条）{% endif %}</div>
@@ -52,14 +54,15 @@
         </p>
         <small>{{ conversation.latest_at }}</small>
       </div>
-    </a>
+    </button>
+    </form>
   {% endfor %}
 
   {% for order in shipment_orders %}
     <a class="notification-item shipment" href="{{ url_for('order_detail', oid=order.id) }}">
       <span class="notification-dot"></span>
       <div>
-        <div class="notification-title">待处理：{{ order.buyer_name }} 已付款，等待发货</div>
+        <div class="notification-title">待处理：{{ order.buyer_name }} 已付款，等待发货 <span class="status-pill task">待处理</span></div>
         <p>订单《{{ order.title }}》金额 ¥{{ '%.2f'|format(order.amount) }}，请进入订单点击“已发货”。</p>
         <small>{{ order.paid_at or order.created_at }}</small>
       </div>
@@ -70,7 +73,7 @@
     <a class="notification-item urgent" href="{{ url_for('order_detail', oid=order.id) }}">
       <span class="notification-dot"></span>
       <div>
-        <div class="notification-title">待处理：{{ order.buyer_name }} 申请退款</div>
+        <div class="notification-title">待处理：{{ order.buyer_name }} 申请退款 <span class="status-pill task">待处理</span></div>
         <p>订单《{{ order.title }}》等待你处理，金额 ¥{{ '%.2f'|format(order.amount) }}。</p>
         {% if order.refund_reason %}<p>原因：{{ order.refund_reason }}</p>{% endif %}
         <small>{{ order.refund_requested_at or order.created_at }}</small>

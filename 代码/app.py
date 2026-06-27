@@ -42,7 +42,9 @@ RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
 CSRF_SESSION_KEY = "_csrf_token"
 CSRF_FIELD_NAME = "_csrf_token"
-DEFAULT_PAYMENT_PASSWORD = "111111"
+PHONE_CHANGE_STEP_KEY = "phone_change_step"
+PHONE_CHANGE_VERIFIED_AT_KEY = "phone_change_verified_at"
+PHONE_CHANGE_VERIFY_TTL_SECONDS = 300
 EXPIRED_ORDER_REFRESH_ENDPOINTS = {
     "index", "product_detail", "order_detail",
     "admin_dashboard", "admin_orders",
@@ -154,6 +156,31 @@ def safe_redirect_target(default_endpoint="index"):
     if is_safe_next_url(target):
         return target
     return url_for(default_endpoint)
+
+
+def current_timestamp():
+    return int(datetime.now().timestamp())
+
+
+def clear_phone_change_state():
+    session.pop(PHONE_CHANGE_STEP_KEY, None)
+    session.pop(PHONE_CHANGE_VERIFIED_AT_KEY, None)
+
+
+def mark_phone_change_verified():
+    session[PHONE_CHANGE_STEP_KEY] = "bind_new"
+    session[PHONE_CHANGE_VERIFIED_AT_KEY] = current_timestamp()
+
+
+def current_phone_change_step(user):
+    if not user.get("phone"):
+        return "bind_new"
+    verified_at = session.get(PHONE_CHANGE_VERIFIED_AT_KEY)
+    if session.get(PHONE_CHANGE_STEP_KEY) == "bind_new" and verified_at:
+        if current_timestamp() - int(verified_at) <= PHONE_CHANGE_VERIFY_TTL_SECONDS:
+            return "bind_new"
+    clear_phone_change_state()
+    return "verify_old"
 
 
 def add_admin_log(cur, action, target_type, target_id=None, detail=None):
@@ -707,13 +734,7 @@ def ensure_runtime_schema():
             cur, "users", "payment_password_hash",
             "VARCHAR(255) DEFAULT NULL COMMENT '支付密码哈希'",
         )
-        cur.execute("SELECT id FROM users WHERE payment_password_hash IS NULL OR payment_password_hash=''")
-        users_missing_payment_password = cur.fetchall()
-        for user_row in users_missing_payment_password:
-            cur.execute(
-                "UPDATE users SET payment_password_hash=%s WHERE id=%s",
-                (generate_password_hash(DEFAULT_PAYMENT_PASSWORD), user_row["id"]),
-            )
+        cur.execute("ALTER TABLE users MODIFY payment_password_hash VARCHAR(255) DEFAULT NULL COMMENT '支付密码哈希'")
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS admins (
@@ -1177,12 +1198,11 @@ def register():
 
         with get_cursor(commit=True) as cur:
             cur.execute(
-                "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone) "
-                "VALUES (%s, %s, %s, %s, %s)",
+                "INSERT INTO users (username, password_hash, nickname, phone) "
+                "VALUES (%s, %s, %s, %s)",
                 (
                     username,
                     generate_password_hash(password),
-                    generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
                     nickname,
                     phone,
                 ),
@@ -1200,10 +1220,10 @@ def login():
         user = query_one("SELECT * FROM users WHERE username=%s", (username,))
         if not user or not check_password_hash(user["password_hash"], password):
             flash("账号或密码错误", "danger")
-            return render_template("login.html")
+            return render_template("login.html", username=username)
         if not user.get("is_active", 1):
             flash("账号已被停用，请联系管理员", "danger")
-            return render_template("login.html")
+            return render_template("login.html", username=username)
         session["user_id"] = user["id"]
         flash("登录成功，欢迎 %s" % user["nickname"], "success")
         next_url = safe_redirect_target()
@@ -1498,8 +1518,32 @@ def admin_logs():
 @admin_required("can_manage_products")
 def admin_products():
     keyword = request.args.get("q", "").strip()
-    where_sql = ""
+    status_filter = request.args.get("status", "all").strip()
+    status_tabs = [
+        ("all", "全部"),
+        ("on_sale", PRODUCT_STATUS["on_sale"]),
+        ("locked", PRODUCT_STATUS["locked"]),
+        ("sold", PRODUCT_STATUS["sold"]),
+        ("removed", PRODUCT_STATUS["removed"]),
+        ("admin_removed", "管理下架"),
+    ]
+    valid_status_filters = {key for key, _label in status_tabs}
+    if status_filter not in valid_status_filters:
+        status_filter = "all"
+    where_clauses = []
     params = []
+    if status_filter == "admin_removed":
+        where_clauses.append(
+            "p.status='removed' AND ("
+            "SELECT l.action FROM admin_logs l "
+            "WHERE l.target_type='product' AND l.target_id=p.id "
+            "AND l.action IN ('product_remove','product_restore') "
+            "ORDER BY l.created_at DESC, l.id DESC LIMIT 1"
+            ")='product_remove'"
+        )
+    elif status_filter != "all":
+        where_clauses.append("p.status=%s")
+        params.append(status_filter)
     if keyword:
         like = "%%%s%%" % keyword
         search_clauses = [
@@ -1516,11 +1560,21 @@ def admin_products():
             key for key, label in PRODUCT_STATUS.items()
             if keyword.lower() in key.lower() or keyword in label
         ]
+        if keyword in "管理下架" or "admin_removed".startswith(keyword.lower()):
+            search_clauses.append(
+                "p.status='removed' AND ("
+                "SELECT l.action FROM admin_logs l "
+                "WHERE l.target_type='product' AND l.target_id=p.id "
+                "AND l.action IN ('product_remove','product_restore') "
+                "ORDER BY l.created_at DESC, l.id DESC LIMIT 1"
+                ")='product_remove'"
+            )
         if matched_statuses:
             placeholders = ", ".join(["%s"] * len(matched_statuses))
             search_clauses.append("p.status IN (%s)" % placeholders)
             params.extend(matched_statuses)
-        where_sql = "WHERE " + " OR ".join(search_clauses) + " "
+        where_clauses.append("(" + " OR ".join(search_clauses) + ")")
+    where_sql = ("WHERE " + " AND ".join(where_clauses) + " ") if where_clauses else ""
 
     products = hydrate_product_images(query_all(
         "SELECT p.*, c.name AS category_name, u.nickname AS seller_name, "
@@ -1533,26 +1587,34 @@ def admin_products():
         "ORDER BY p.created_at DESC",
         tuple(params),
     ))
-    return render_template("admin_products.html", products=products, keyword=keyword)
+    return render_template(
+        "admin_products.html",
+        products=products,
+        keyword=keyword,
+        status_filter=status_filter,
+        status_tabs=status_tabs,
+    )
 
 
 @app.route("/admin/products/<int:pid>/remove", methods=["POST"])
 @admin_required("can_manage_products")
 def admin_remove_product(pid):
     reason = request.form.get("reason", "").strip()
+    next_url = request.form.get("next", "")
+    redirect_target = next_url if is_safe_next_url(next_url) else url_for("admin_products")
     if not reason:
         flash("管理员下架商品必须填写原因", "danger")
-        return redirect(url_for("admin_products"))
+        return redirect(redirect_target)
     if len(reason) > 255:
         flash("下架原因最多 255 字", "danger")
-        return redirect(url_for("admin_products"))
+        return redirect(redirect_target)
 
     product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
     if not product:
         abort(404)
     if product["status"] not in ("on_sale", "removed"):
         flash("交易中或已售出的商品不能由后台直接下架", "warning")
-        return redirect(url_for("admin_products"))
+        return redirect(redirect_target)
 
     with get_cursor(commit=True) as cur:
         cur.execute(
@@ -1571,18 +1633,20 @@ def admin_remove_product(pid):
         )
         add_admin_log(cur, "product_remove", "product", pid, reason)
     flash("商品已由管理员下架", "success")
-    return redirect(url_for("admin_products"))
+    return redirect(redirect_target)
 
 
 @app.route("/admin/products/<int:pid>/restore", methods=["POST"])
 @admin_required("can_manage_products")
 def admin_restore_product(pid):
+    next_url = request.form.get("next", "")
+    redirect_target = next_url if is_safe_next_url(next_url) else url_for("admin_products")
     product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
     if not product:
         abort(404)
     if product["status"] != "removed":
         flash("只有已下架商品可以恢复", "warning")
-        return redirect(url_for("admin_products"))
+        return redirect(redirect_target)
 
     with get_cursor(commit=True) as cur:
         cur.execute(
@@ -1601,7 +1665,7 @@ def admin_restore_product(pid):
         )
         add_admin_log(cur, "product_restore", "product", pid, product["title"])
     flash("商品已恢复上架", "success")
-    return redirect(url_for("admin_products"))
+    return redirect(redirect_target)
 
 
 @app.route("/admin/users")
@@ -1794,12 +1858,11 @@ def admin_register():
 
         with get_cursor(commit=True) as cur:
             cur.execute(
-                "INSERT INTO users (username, password_hash, payment_password_hash, nickname, phone) "
-                "VALUES (%s, %s, %s, %s, %s)",
+                "INSERT INTO users (username, password_hash, nickname, phone) "
+                "VALUES (%s, %s, %s, %s)",
                 (
                     username,
                     generate_password_hash(password),
-                    generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
                     nickname,
                     phone,
                 ),
@@ -2093,6 +2156,7 @@ def order_detail(oid):
         APPEAL_STATUS=APPEAL_STATUS,
         payment_deadline=payment_deadline,
         payment_deadline_ms=payment_deadline_ms,
+        payment_password_set=bool(current_user().get("payment_password_hash")) if uid == order["buyer_id"] else True,
         server_now_ms=int(datetime.now().timestamp() * 1000),
     )
 
@@ -2139,9 +2203,6 @@ def create_order_appeal(oid):
 def pay_order(oid):
     buyer_id = session["user_id"]
     payment_password = request.form.get("payment_password", "").strip()
-    if not is_six_digit_code(payment_password):
-        flash("请输入 6 位数字支付密码", "danger")
-        return redirect(url_for("order_detail", oid=oid))
     try:
         with get_cursor(commit=True) as cur:
             cur.execute("SELECT * FROM orders WHERE id=%s FOR UPDATE", (oid,))
@@ -2188,14 +2249,20 @@ def pay_order(oid):
                 (buyer_id,),
             )
             buyer = cur.fetchone()
-            if not buyer.get("payment_password_hash") or not check_password_hash(
+            if not buyer.get("payment_password_hash"):
+                flash("请先设置支付密码，再完成余额支付", "warning")
+                return redirect(url_for("change_payment_password", next=url_for("order_detail", oid=oid)))
+            if not is_six_digit_code(payment_password):
+                flash("请输入 6 位数字支付密码", "danger")
+                return redirect(url_for("order_detail", oid=oid))
+            if not check_password_hash(
                 buyer["payment_password_hash"], payment_password
             ):
                 flash("支付密码不正确", "danger")
                 return redirect(url_for("order_detail", oid=oid))
             if buyer["balance"] < order["amount"]:
                 flash("余额不足，请先充值", "danger")
-                return redirect(url_for("order_detail", oid=oid))
+                return redirect(url_for("recharge", next=url_for("order_detail", oid=oid)))
 
             # 扣买家余额（平台托管，确认收货后再打款卖家）
             cur.execute(
@@ -2657,34 +2724,57 @@ def profile():
 @login_required
 def change_phone():
     user = current_user()
+    step = current_phone_change_step(user)
     if request.method == "POST":
+        action = request.form.get("action", "").strip()
+        if action == "verify_old":
+            old_phone_code = request.form.get("old_phone_code", "").strip()
+            if not user.get("phone"):
+                return redirect(url_for("change_phone"))
+            if not old_phone_code:
+                flash("请填写当前手机号验证码", "danger")
+                return render_template("change_phone.html", user=user, step="verify_old")
+            mark_phone_change_verified()
+            flash("当前手机号验证通过，请绑定新手机号", "success")
+            return redirect(url_for("change_phone"))
+
+        if action != "bind_new":
+            flash("请按页面流程完成手机号修改", "danger")
+            return render_template("change_phone.html", user=user, step=step)
+
+        if step != "bind_new":
+            flash("请先完成当前手机号验证", "danger")
+            return render_template("change_phone.html", user=user, step="verify_old")
+
         phone = request.form.get("phone", "").strip()
-        profile_phone_code = request.form.get("profile_phone_code", "").strip()
+        new_phone_code = request.form.get("new_phone_code", "").strip()
         if not phone:
             flash("请填写新手机号", "danger")
-            return render_template("change_phone.html", user=user)
+            return render_template("change_phone.html", user=user, step="bind_new")
         if phone == (user.get("phone") or ""):
             flash("新手机号不能和当前手机号相同", "danger")
-            return render_template("change_phone.html", user=user)
-        if not profile_phone_code:
+            return render_template("change_phone.html", user=user, step="bind_new")
+        if not new_phone_code:
             flash("请填写新手机号验证码", "danger")
-            return render_template("change_phone.html", user=user)
+            return render_template("change_phone.html", user=user, step="bind_new")
 
         with get_cursor(commit=True) as cur:
             cur.execute(
                 "UPDATE users SET phone=%s WHERE id=%s",
                 (phone, session["user_id"]),
             )
+        clear_phone_change_state()
         flash("手机号已修改", "success")
         return redirect(url_for("profile"))
 
-    return render_template("change_phone.html", user=user)
+    return render_template("change_phone.html", user=user, step=step)
 
 
 @app.route("/me/payment-password", methods=["GET", "POST"])
 @login_required
 def change_payment_password():
     user = current_user()
+    has_payment_password = bool(user.get("payment_password_hash"))
     if request.method == "POST":
         old_payment_password = request.form.get("old_payment_password", "").strip()
         new_payment_password = request.form.get("new_payment_password", "").strip()
@@ -2692,32 +2782,38 @@ def change_payment_password():
         payment_phone_code = request.form.get("payment_phone_code", "").strip()
 
         if not user.get("phone"):
-            flash("请先绑定手机号后再修改支付密码", "danger")
-            return render_template("change_payment_password.html", user=user)
-        if not old_payment_password or not new_payment_password or not confirm_payment_password or not payment_phone_code:
-            flash("请完整填写原支付密码、新支付密码、确认支付密码和手机验证码", "danger")
-            return render_template("change_payment_password.html", user=user)
-        if not is_six_digit_code(old_payment_password) or not is_six_digit_code(new_payment_password):
+            flash("请先绑定手机号后再设置支付密码", "danger")
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if has_payment_password and not old_payment_password:
+            flash("请填写原支付密码", "danger")
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if not new_payment_password or not confirm_payment_password or not payment_phone_code:
+            flash("请完整填写新支付密码、确认支付密码和手机验证码", "danger")
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if has_payment_password and not is_six_digit_code(old_payment_password):
+            flash("原支付密码必须是 6 位数字", "danger")
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if not is_six_digit_code(new_payment_password):
             flash("支付密码必须是 6 位数字", "danger")
-            return render_template("change_payment_password.html", user=user)
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
         if new_payment_password != confirm_payment_password:
             flash("两次输入的新支付密码不一致", "danger")
-            return render_template("change_payment_password.html", user=user)
-        if not user.get("payment_password_hash") or not check_password_hash(
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if has_payment_password and not check_password_hash(
             user["payment_password_hash"], old_payment_password
         ):
             flash("原支付密码不正确", "danger")
-            return render_template("change_payment_password.html", user=user)
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
 
         with get_cursor(commit=True) as cur:
             cur.execute(
                 "UPDATE users SET payment_password_hash=%s WHERE id=%s",
                 (generate_password_hash(new_payment_password), session["user_id"]),
             )
-        flash("支付密码已修改", "success")
-        return redirect(url_for("profile"))
+        flash("支付密码已%s" % ("修改" if has_payment_password else "设置"), "success")
+        return redirect(safe_redirect_target("profile"))
 
-    return render_template("change_payment_password.html", user=user)
+    return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
 
 
 @app.route("/me/selling")
@@ -2766,13 +2862,6 @@ def my_messages():
             (selected_user_id,),
         )
         if selected_user:
-            with get_cursor(commit=True) as cur:
-                cur.execute(
-                    "UPDATE messages SET is_read=1 "
-                    "WHERE sender_id=%s AND receiver_id=%s "
-                    "AND receiver_deleted=0 AND is_read=0",
-                    (selected_user_id, uid),
-                )
             selected_messages = get_conversation_messages(uid, selected_user_id)
             for message in reversed(selected_messages):
                 if message.get("product_id"):
@@ -2803,7 +2892,7 @@ def my_notifications():
         "LEFT JOIN products p ON n.product_id = p.id "
         "LEFT JOIN orders o ON n.order_id = o.id "
         "WHERE n.user_id=%s "
-        "AND NOT (n.is_read=0 AND n.notice_type IN ('order_paid','refund_requested') AND n.actor_id IS NOT NULL) "
+        "AND NOT (n.notice_type IN ('order_paid','refund_requested') AND n.actor_id IS NOT NULL) "
         "ORDER BY n.is_read ASC, n.created_at DESC LIMIT 50",
         (uid,),
     )
@@ -2850,12 +2939,33 @@ def open_notification(nid):
     return redirect(url_for("my_notifications"))
 
 
+@app.route("/me/notifications/message/<int:other_id>/open", methods=["POST"])
+@login_required
+def open_unread_conversation(other_id):
+    uid = session["user_id"]
+    if other_id == uid:
+        abort(404)
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            "UPDATE messages SET is_read=1 "
+            "WHERE sender_id=%s AND receiver_id=%s "
+            "AND receiver_deleted=0 AND is_read=0",
+            (other_id, uid),
+        )
+    return redirect(url_for("my_messages", with_user=other_id))
+
+
 @app.route("/me/notifications/read-all", methods=["POST"])
 @login_required
 def mark_notifications_read():
     uid = session["user_id"]
     with get_cursor(commit=True) as cur:
-        cur.execute("UPDATE notifications SET is_read=1 WHERE user_id=%s AND is_read=0", (uid,))
+        cur.execute(
+            "UPDATE notifications SET is_read=1 "
+            "WHERE user_id=%s AND is_read=0 "
+            "AND NOT (notice_type IN ('order_paid','refund_requested') AND actor_id IS NOT NULL)",
+            (uid,),
+        )
     flash("事件提醒已全部标为已读", "success")
     return redirect(url_for("my_notifications"))
 

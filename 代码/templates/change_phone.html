@@ -11,9 +11,26 @@
 
   <form class="profile-form" method="post">
     {{ csrf_field() }}
-    <section>
-      <h2>验证新手机号</h2>
-      <p class="auth-tip">先填写新的手机号，再点击发送验证码。当前为测试环境，验证码任意填写即可通过。</p>
+    {% if step == 'verify_old' %}
+      <input type="hidden" name="action" value="verify_old">
+      <section>
+        <h2>验证当前手机号</h2>
+        <p class="auth-tip">先向当前绑定手机号发送验证码，验证通过后才能绑定新的手机号。当前为测试环境，验证码任意填写即可通过。</p>
+        <div class="bound-phone-box">
+          <span>当前手机号</span>
+          <strong>{{ user.phone or '未绑定' }}</strong>
+        </div>
+        <label>当前手机号验证码</label>
+        <div class="verify-row">
+          <input type="text" name="old_phone_code" placeholder="填写当前手机号验证码" required>
+          <button type="button" class="btn-outline send-code-btn" data-code-button>发送验证码</button>
+        </div>
+      </section>
+    {% else %}
+      <input type="hidden" name="action" value="bind_new">
+      <section>
+        <h2>绑定新手机号</h2>
+        <p class="auth-tip">当前手机号已验证，通过新手机号验证码后才会保存修改。当前为测试环境，验证码任意填写即可通过。</p>
       <div class="bound-phone-box">
         <span>当前手机号</span>
         <strong>{{ user.phone or '未绑定' }}</strong>
@@ -21,13 +38,14 @@
       <label>新手机号<input type="text" name="phone" maxlength="20" placeholder="填写新的手机号" required></label>
       <label>新手机号验证码</label>
       <div class="verify-row">
-        <input type="text" name="profile_phone_code" placeholder="测试环境任意填写" required>
+        <input type="text" name="new_phone_code" placeholder="填写新手机号验证码" required>
         <button type="button" class="btn-outline send-code-btn" data-code-button data-requires="phone" data-require-message="请先填写新手机号">发送验证码</button>
       </div>
-    </section>
+      </section>
+    {% endif %}
 
     <div class="form-actions">
-      <button type="submit" class="btn-primary">确认修改</button>
+      <button type="submit" class="btn-primary">{{ '验证当前手机号' if step == 'verify_old' else '确认修改' }}</button>
       <a class="btn-outline" href="{{ url_for('profile') }}">返回账号设置</a>
     </div>
   </form>

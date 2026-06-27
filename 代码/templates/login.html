@@ -5,7 +5,7 @@
   <h2>登录</h2>
   <form method="post">
     {{ csrf_field() }}
-    <label>账号<input type="text" name="username" required></label>
+    <label>账号<input type="text" name="username" value="{{ username or '' }}" required></label>
     <label>密码<input type="password" name="password" required></label>
     <button type="submit" class="btn-primary">登录</button>
   </form>

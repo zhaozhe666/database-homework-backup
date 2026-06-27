@@ -248,6 +248,21 @@ assert db.query_one("SELECT COUNT(*) c FROM messages WHERE product_id=%s", (pid,
 client.get("/logout")
 
 post("/login", username=buyer["username"], password="pass1234")
+assert db.query_one(
+    "SELECT payment_password_hash FROM users WHERE username=%s",
+    (buyer["username"],),
+)["payment_password_hash"] is None
+post(
+    "/me/payment-password",
+    new_payment_password="111111",
+    confirm_payment_password="111111",
+    payment_phone_code="000000",
+)
+assert db.query_one(
+    "SELECT payment_password_hash FROM users WHERE username=%s",
+    (buyer["username"],),
+)["payment_password_hash"]
+print("新注册买家设置支付密码 OK")
 post("/wallet/recharge", amount="500")
 print("买家充值后余额 =",
       db.query_one("SELECT balance FROM users WHERE username=%s", (buyer["username"],))["balance"])
@@ -334,7 +349,14 @@ remaining_unread = db.query_one(
     "WHERE receiver_id=%s AND is_read=0 AND receiver_deleted=0",
     (seller_id,),
 )["c"]
-print("点开一个对话后剩余未读 =", remaining_unread)
+assert remaining_unread == 2
+post(f"/me/notifications/message/{buyer_id}/open")
+remaining_unread = db.query_one(
+    "SELECT COUNT(*) c FROM messages "
+    "WHERE receiver_id=%s AND is_read=0 AND receiver_deleted=0",
+    (seller_id,),
+)["c"]
+print("POST open conversation remaining unread =", remaining_unread)
 assert remaining_unread == 1
 post(f"/message/conversation/{buyer2_id}/delete")
 assert db.query_one(

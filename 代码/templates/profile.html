@@ -31,15 +31,16 @@
         <label>新密码<input type="password" name="new_password" minlength="6" autocomplete="new-password"></label>
         <label>确认新密码<input type="password" name="confirm_password" minlength="6" autocomplete="new-password"></label>
       </div>
+      <button type="submit" class="btn-primary btn-inline-save">保存登录密码</button>
     </section>
 
     <section>
       <h2>支付安全</h2>
-      <p class="auth-tip">余额支付需要 6 位数字支付密码。默认支付密码为 111111，建议演示时单独进入修改页展示手机验证流程。</p>
+      <p class="auth-tip">余额支付需要先设置 6 位数字支付密码。</p>
       <div class="bound-phone-box">
-        <span>验证手机号</span>
-        <strong>{{ user.phone or '请先绑定手机号' }}</strong>
-        <a class="btn-outline btn-xs" href="{{ url_for('change_payment_password') }}">修改支付密码</a>
+        <span>支付密码</span>
+        <strong>{{ '已设置' if user.payment_password_hash else '未设置' }}</strong>
+        <a class="btn-outline btn-xs" href="{{ url_for('change_payment_password') }}">{{ '修改支付密码' if user.payment_password_hash else '设置支付密码' }}</a>
       </div>
     </section>
 

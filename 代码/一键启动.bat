@@ -9,25 +9,43 @@ echo ========================================
 echo.
 
 echo [1/4] Checking Python...
-where python >nul 2>nul
-if errorlevel 1 (
+if not exist ".venv\Scripts\python.exe" (
+    where python >nul 2>nul
+    if errorlevel 1 (
+        echo [ERROR] Python command was not found. Please install Python or add it to PATH.
+        echo.
+        pause
+        exit /b 1
+    )
+    echo Creating project virtual environment...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Failed to create virtual environment.
+        echo.
+        pause
+        exit /b 1
+    )
+)
+if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] Python command was not found. Please install Python or add it to PATH.
     echo.
     pause
     exit /b 1
 )
-python --version
+set "PYTHON=.venv\Scripts\python.exe"
+"%PYTHON%" --version
 echo.
 
 echo [2/4] Checking Python packages...
-python -c "import flask, pymysql, werkzeug" >nul 2>nul
+"%PYTHON%" -c "import flask, pymysql, werkzeug" >nul 2>nul
 if errorlevel 1 (
-    echo Required packages are missing. Running: python -m pip install -r requirements.txt
-    python -m pip install -r requirements.txt
+    echo Required packages are missing. Running: "%PYTHON%" -m pip install -r requirements.txt
+    "%PYTHON%" -m pip install -r requirements.txt
     if errorlevel 1 (
         echo.
         echo [ERROR] Package installation failed. Please check the network or run this manually:
-        echo python -m pip install -r requirements.txt
+        echo "%PYTHON%" -m pip install -r requirements.txt
         echo.
         pause
         exit /b 1
@@ -38,7 +56,7 @@ if errorlevel 1 (
 echo.
 
 echo [3/4] Checking database connection...
-python -c "from db import query_one; query_one('SELECT 1 AS ok')" >nul 2>nul
+"%PYTHON%" -c "from db import query_one; query_one('SELECT 1 AS ok')" >nul 2>nul
 if errorlevel 1 (
     echo Database is not ready. Trying to start bundled MySQL...
     set "MYSQL_EXE=D:\BtSoft\mysql\MySQL5.6\bin\mysqld.exe"
@@ -64,7 +82,7 @@ if errorlevel 1 (
         start "" /min "%MYSQL_EXE%" --defaults-file="%MYSQL_INI%"
         timeout /t 5 /nobreak >nul
     )
-    python -c "from db import query_one; query_one('SELECT 1 AS ok')" >nul 2>nul
+    "%PYTHON%" -c "from db import query_one; query_one('SELECT 1 AS ok')" >nul 2>nul
     if errorlevel 1 (
         echo.
         echo [ERROR] Cannot connect to MySQL or database secondhand does not exist.
@@ -72,7 +90,7 @@ if errorlevel 1 (
         echo Please check:
         echo 1. MySQL service is running or D:\BtSoft\mysql\MySQL5.6 can start normally.
         echo 2. Database account and password in config.py are correct.
-        echo 3. For first-time setup, run: python init_db.py
+        echo 3. For first-time setup, run: "%PYTHON%" init_db.py
         echo.
         echo Note: init_db.py resets the demo database. Do not run it repeatedly unless needed.
         echo.
@@ -90,7 +108,7 @@ echo Press Ctrl+C in this window to stop the website.
 echo.
 
 start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://127.0.0.1:5000'"
-python app.py
+"%PYTHON%" app.py
 
 echo.
 echo Website stopped.

@@ -13,7 +13,7 @@ from config import DB_CONFIG
 from db import get_connection
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
-DEFAULT_PAYMENT_PASSWORD = "111111"
+DEMO_PAYMENT_PASSWORD = "111111"
 
 
 def split_sql(text):
@@ -110,7 +110,7 @@ def seed_data():
                     (
                         username,
                         generate_password_hash(pwd),
-                        generate_password_hash(DEFAULT_PAYMENT_PASSWORD),
+                        generate_password_hash(DEMO_PAYMENT_PASSWORD),
                         nickname,
                         phone,
                         balance,

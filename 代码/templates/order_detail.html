@@ -59,11 +59,16 @@
     {% endif %}
     {% if order.status == 'created' and is_buyer %}
       <p class="own-tip">请在 10 分钟内付款，超时订单会自动取消。</p>
-      <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" class="pay-password-form">
-        {{ csrf_field() }}
-        <input type="password" name="payment_password" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="输入6位支付密码" required>
-        <button class="btn-primary" data-pay-submit onclick="return confirm('确定使用余额支付这笔订单吗？');">余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
-      </form>
+      {% if payment_password_set %}
+        <form action="{{ url_for('pay_order', oid=order.id) }}" method="post" class="pay-password-form">
+          {{ csrf_field() }}
+          <input type="password" name="payment_password" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="输入6位支付密码" required>
+          <button class="btn-primary" data-pay-submit onclick="return confirm('确定使用余额支付这笔订单吗？');">余额支付 ¥{{ '%.2f'|format(order.amount) }}</button>
+        </form>
+        <a class="btn-outline" href="{{ url_for('recharge', next=url_for('order_detail', oid=order.id)) }}">Recharge</a>
+      {% else %}
+        <a class="btn-primary" href="{{ url_for('change_payment_password', next=url_for('order_detail', oid=order.id)) }}">先设置支付密码</a>
+      {% endif %}
     {% endif %}
     {% if order.status == 'created' and (is_buyer or is_seller) %}
       <form action="{{ url_for('cancel_order', oid=order.id) }}" method="post" style="display:inline">
