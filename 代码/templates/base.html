@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}校园二手市场{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260627') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260627-cleanup') }}">
 </head>
 <body>
   {% set is_admin_area = request.endpoint and request.endpoint.startswith('admin') %}
@@ -25,60 +25,10 @@
   ] %}
   {% set is_account_area = request.endpoint in account_endpoints %}
   {% if not is_account_area and not is_admin_area %}
-  <header class="navbar">
-    <div class="nav-inner">
-      <a class="brand" href="{{ url_for('index') }}">
-        <span class="brand-mark">集</span>
-        <span class="brand-text">二手集市</span>
-      </a>
-      <form class="search" action="{{ url_for('index') }}" method="get">
-        <input type="text" name="q" placeholder="搜索想要的宝贝…" value="{{ keyword or '' }}">
-        <button type="submit">搜索</button>
-      </form>
-      <nav class="nav-links">
-        <a href="{{ url_for('index') }}" class="nav-link">首页</a>
-        {% if current_user %}
-          <a href="{{ url_for('publish') }}" class="nav-link nav-sell">发布闲置</a>
-          <a href="{{ url_for('me') }}" class="nav-link">个人中心</a>
-          {% if current_user.is_admin %}
-            <a href="{{ url_for('admin_dashboard') }}" class="nav-link">后台</a>
-          {% endif %}
-          <a href="{{ url_for('my_notifications') }}" class="nav-link nav-notice {% if notification_summary and notification_summary.total %}has-notice{% endif %}">
-            <span>提醒</span>
-            {% if notification_summary and notification_summary.total %}
-              <span class="notice-badge">{{ notification_summary.total }}</span>
-            {% endif %}
-          </a>
-          <a class="nav-wallet" href="{{ url_for('recharge') }}" title="钱包充值">
-            <span class="nav-wallet-label">钱包</span>
-            <span>¥{{ '%.2f'|format(current_user.balance) }}</span>
-          </a>
-          <span class="nav-user">
-            <span class="nav-avatar">{{ current_user.nickname[:1] }}</span>
-            <span class="nav-user-main">
-              <span class="nav-user-name">{{ current_user.nickname }}</span>
-              <span class="nav-user-role">{{ '管理员' if current_user.is_admin else '同学' }}</span>
-            </span>
-          </span>
-          <a class="nav-logout" href="{{ url_for('logout') }}">退出</a>
-        {% else %}
-          <a href="{{ url_for('login') }}" class="nav-link">登录</a>
-          <a class="btn-sm" href="{{ url_for('register') }}">注册</a>
-        {% endif %}
-      </nav>
-    </div>
-  </header>
+  {% include '_header.html' %}
 
   <main class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="flashes">
-          {% for category, msg in messages %}
-            <div class="flash flash-{{ category }}">{{ msg }}</div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    {% include '_flashes.html' %}
 
     {% block content %}{% endblock %}
   </main>
@@ -87,96 +37,8 @@
     <p>校园二手交易平台 · 数据库课程设计 · MySQL + Flask</p>
   </footer>
   {% else %}
-  <div class="app-shell {% if not is_admin_area %}account-shell{% endif %}">
-    <aside class="side-nav">
-      <a class="side-brand" href="{{ url_for('index') }}">
-        <span class="side-brand-mark"><i></i></span>
-        <b>校园二手市场</b>
-      </a>
-
-      <nav class="side-menu">
-        {% if not is_admin_area %}
-        <a class="side-home-link" href="{{ url_for('index') }}">
-          <span class="side-ico side-ico-home"></span>返回首页
-        </a>
-        <a class="{% if request.endpoint == 'me' %}active{% endif %}" href="{{ url_for('me') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-user"></span>账户总览
-        </a>
-        <a class="{% if request.endpoint in ['my_bought', 'my_sold', 'order_detail'] %}active{% endif %}" href="{{ url_for('my_bought') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-order"></span>交易订单
-        </a>
-        <a class="{% if request.endpoint in ['my_selling', 'my_products', 'publish', 'edit_product'] %}active{% endif %}" href="{{ url_for('my_selling') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-box"></span>我的发布
-        </a>
-        <a class="{% if request.endpoint == 'my_favorites' %}active{% endif %}" href="{{ url_for('my_favorites') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-star"></span>收藏夹
-        </a>
-        <a class="{% if request.endpoint == 'my_messages' %}active{% endif %}" href="{{ url_for('my_messages') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-chat"></span>我的消息
-          {% if notification_summary and notification_summary.unread_messages %}<em>{{ notification_summary.unread_messages }}</em>{% endif %}
-        </a>
-        <a class="{% if request.endpoint == 'my_notifications' %}active{% endif %}" href="{{ url_for('my_notifications') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-bell"></span>提醒中心
-          {% if notification_summary and (notification_summary.unread_notifications or notification_summary.refund_requests or notification_summary.pending_shipments) %}
-            <em>{{ notification_summary.unread_notifications + notification_summary.refund_requests + notification_summary.pending_shipments }}</em>
-          {% endif %}
-        </a>
-        <a class="{% if request.endpoint in ['profile', 'change_phone', 'change_payment_password'] %}active{% endif %}" href="{{ url_for('profile') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-wallet"></span>钱包与资料
-        </a>
-        <a class="{% if request.endpoint == 'recharge' %}active{% endif %}" href="{{ url_for('recharge') if current_user else url_for('login') }}">
-          <span class="side-ico side-ico-wallet"></span>钱包充值
-        </a>
-          {% if current_user and current_user.is_admin %}
-            <a href="{{ url_for('admin_dashboard') }}">
-              <span class="side-ico side-ico-shield"></span>后台管理
-            </a>
-          {% endif %}
-        {% else %}
-        <a href="{{ url_for('index') }}">
-          <span class="side-ico side-ico-home"></span>返回首页
-        </a>
-        <a class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}" href="{{ url_for('admin_dashboard') }}">
-          <span class="side-ico side-ico-shield"></span>后台总览
-        </a>
-        {% if current_user.admin.can_manage_products %}
-        <a class="{% if request.endpoint == 'admin_products' %}active{% endif %}" href="{{ url_for('admin_products') }}">
-          <span class="side-ico side-ico-box"></span>商品管理
-        </a>
-        <a class="{% if request.endpoint == 'admin_reports' %}active{% endif %}" href="{{ url_for('admin_reports') }}">
-          <span class="side-ico side-ico-bell"></span>商品举报
-        </a>
-        {% endif %}
-        <a class="{% if request.endpoint == 'admin_orders' %}active{% endif %}" href="{{ url_for('admin_orders') }}">
-          <span class="side-ico side-ico-order"></span>订单管理
-        </a>
-        <a class="{% if request.endpoint == 'admin_appeals' %}active{% endif %}" href="{{ url_for('admin_appeals') }}">
-          <span class="side-ico side-ico-chat"></span>交易申诉
-        </a>
-        {% if current_user.admin.can_manage_users %}
-        <a class="{% if request.endpoint == 'admin_users' %}active{% endif %}" href="{{ url_for('admin_users') }}">
-          <span class="side-ico side-ico-user"></span>用户管理
-        </a>
-        {% endif %}
-        {% if current_user.admin.can_manage_admin_register %}
-        <a class="{% if request.endpoint in ['admin_settings', 'admin_register'] %}active{% endif %}" href="{{ url_for('admin_settings') }}">
-          <span class="side-ico side-ico-wallet"></span>系统设置
-        </a>
-        {% endif %}
-        <a class="{% if request.endpoint == 'admin_logs' %}active{% endif %}" href="{{ url_for('admin_logs') }}">
-          <span class="side-ico side-ico-bell"></span>操作日志
-        </a>
-        {% endif %}
-      </nav>
-
-      <div class="side-bottom">
-        {% if current_user %}
-          <a href="{{ url_for('logout') }}"><span class="side-ico side-ico-exit"></span>退出登录</a>
-        {% else %}
-          <a href="{{ url_for('login') }}"><span class="side-ico side-ico-exit"></span>登录</a>
-        {% endif %}
-      </div>
-    </aside>
+  <div class="app-shell {% if is_account_area %}account-shell{% endif %}">
+    {% include '_sidebar.html' %}
 
     <div class="app-main">
       <header class="topbar">
@@ -186,8 +48,8 @@
         </div>
         <nav class="top-actions">
           {% if not is_admin_area %}
-            <a class="btn-outline btn-xs" href="{{ url_for('index') }}">逛市场</a>
-            <a class="btn-primary btn-xs" href="{{ url_for('publish') if current_user else url_for('login') }}">发布闲置</a>
+            <a class="btn-outline" href="{{ url_for('index') }}">逛集市</a>
+            <a class="btn-primary" href="{{ url_for('publish') if current_user else url_for('login') }}">发布闲置</a>
           {% endif %}
           <a class="top-icon top-notice-link" href="{{ url_for('my_notifications') if current_user else url_for('login') }}" title="提醒中心">
             提醒

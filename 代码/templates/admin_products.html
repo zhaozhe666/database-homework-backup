@@ -44,22 +44,22 @@
     <td>
       <div class="admin-actions">
         {% if p.status in ['on_sale', 'removed'] %}
-          <form action="{{ url_for('admin_remove_product', pid=p.id) }}" method="post" class="admin-inline-form">
+          <form action="{{ url_for('admin_remove_product', pid=p.id) }}" method="post" class="admin-inline-form admin-inline-nowrap">
             {{ csrf_field() }}
             <input type="hidden" name="next" value="{{ request.full_path }}">
-            <input type="text" name="reason" maxlength="255" placeholder="下架原因" required>
-            <button class="btn-outline btn-danger btn-xs" type="submit">下架</button>
+            <input class="admin-reason-input" type="text" name="reason" maxlength="255" placeholder="下架原因" required>
+            <button class="btn btn-outline compact-action action-danger" type="submit">下架</button>
           </form>
         {% endif %}
         {% if p.status == 'removed' %}
-          <form action="{{ url_for('admin_restore_product', pid=p.id) }}" method="post">
+          <form action="{{ url_for('admin_restore_product', pid=p.id) }}" method="post" class="admin-inline-form inline-action-form">
             {{ csrf_field() }}
             <input type="hidden" name="next" value="{{ request.full_path }}">
-            <button class="btn-outline btn-success btn-xs" type="submit">恢复</button>
+            <button class="btn btn-outline compact-action action-success" type="submit">恢复</button>
           </form>
         {% endif %}
         {% if p.status not in ['on_sale', 'removed'] %}
-          <span class="muted">交易中/已售不可操作</span>
+          <span class="muted action-note">不可操作</span>
         {% endif %}
       </div>
     </td>

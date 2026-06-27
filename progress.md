@@ -765,3 +765,32 @@
 - `代码/说明.md`：补充一键启动脚本行为说明。
 - `progress.md`：追加本轮修复记录。
 - 回滚方式：还原上述文件中本轮关于 5000 端口检测和说明文档补充的改动。
+
+## 2026-06-27 - Task: 前端优化收口检查
+### What was done
+- 修正个人中心与后台布局壳的 `account-shell` 判断，避免后台误套个人中心布局类。
+- 将提醒页、个人商品/订单列表和后台表格中的临时内联按钮样式收敛为通用 CSS 类。
+- 固定 CSS 版本号，移除随机缓存参数，并合并提示样式和个人中心样式的重复覆盖。
+- 保留个人中心进度条的数据驱动宽度，不把业务计算改成静态样式。
+### Testing
+- 通过：`代码\.venv\Scripts\python.exe -m py_compile 代码/app.py`。
+- 通过：游客首页/登录/注册、普通用户个人中心/资料/支付密码/手机号/发布/提醒/消息/买卖订单/充值、管理员后台/商品/订单/用户/举报/申诉/日志/设置页面均返回 200。
+- 通过：`git diff --check`，仅剩 Windows 换行提示。
+- 通过：搜索确认随机 CSS 版本号和未使用的个人中心临时类已清除；模板内剩余 `style=` 仅为个人中心进度条动态宽度。
+### Notes
+- `代码/static/style.css`：收敛全局提示、个人中心和列表操作样式，新增通用紧凑操作类。
+- `代码/templates/base.html`：修正布局壳判断并固定 CSS 版本号。
+- `代码/templates/_header.html`：发布入口改用已有导航按钮类。
+- `代码/templates/register.html`：注册页左侧背景改用类名承载。
+- `代码/templates/me.html`：个人中心局部布局样式改用类名承载，保留进度条动态宽度。
+- `代码/templates/notifications.html`：提醒页头部、表单和提醒项宽度改用类名承载。
+- `代码/templates/my_orders.html`：订单列表操作区改用通用紧凑操作类。
+- `代码/templates/my_selling.html`：卖家发布列表操作区改用通用紧凑操作类。
+- `代码/templates/my_products.html`：我的发布列表操作区改用通用紧凑操作类。
+- `代码/templates/admin_products.html`：后台商品操作表单改用通用紧凑操作类。
+- `代码/templates/admin_users.html`：后台用户权限和状态操作改用通用紧凑操作类。
+- `代码/templates/admin_reports.html`：后台举报处理操作改用通用紧凑操作类。
+- `代码/templates/admin_appeals.html`：后台申诉处理操作改用通用紧凑操作类。
+- `代码/templates/login.html`、`代码/templates/my_messages.html`、`代码/templates/admin_orders.html`、`代码/templates/_flashes.html`、`代码/templates/_sidebar.html`、`代码/重构优化方案.md`：纳入本轮前端优化验证范围。
+- `progress.md`：追加本轮修复与验证记录。
+- 回滚方式：回滚本轮前端优化提交即可恢复；如手动回滚，恢复上述模板和 `style.css` 中关于布局壳、CSS 版本号、公共片段和通用操作类的改动。

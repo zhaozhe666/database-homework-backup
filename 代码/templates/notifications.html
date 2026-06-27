@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block title %}提醒中心 · 二手集市{% endblock %}
 {% block content %}
-<div class="notification-head">
-  <div>
-    <h2 class="page-title">提醒中心</h2>
-    <p>事件通知、未读消息和需要处理的订单都会集中在这里。</p>
+  <div class="notification-head">
+    <div>
+      <h2 class="page-title">提醒中心</h2>
+      <p>事件通知、未读消息和需要处理的订单都会集中在这里。</p>
+    </div>
+    {% if event_notifications %}
+      <form class="inline-action-form" method="post" action="{{ url_for('mark_notifications_read') }}">
+        {{ csrf_field() }}
+        <button class="btn btn-outline compact-action" type="submit">全部已读</button>
+      </form>
+    {% endif %}
   </div>
-  {% if event_notifications %}
-    <form method="post" action="{{ url_for('mark_notifications_read') }}">
-      {{ csrf_field() }}
-      <button class="btn btn-secondary btn-small" type="submit">全部已读</button>
-    </form>
-  {% endif %}
-</div>
 
 <div class="admin-filterbar admin-status-tabs">
   {% for key, label in notification_tabs %}

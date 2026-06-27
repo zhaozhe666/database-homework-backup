@@ -1,0 +1,43 @@
+﻿<header class="navbar">
+  <div class="nav-inner">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">集</span>
+      <span class="brand-text">二手集市</span>
+    </a>
+    <form class="search" action="{{ url_for('index') }}" method="get">
+      <input type="text" name="q" placeholder="搜索想要的宝贝…" value="{{ keyword or '' }}">
+      <button type="submit">搜索</button>
+    </form>
+    <nav class="nav-links">
+      <a href="{{ url_for('index') }}" class="nav-link">首页</a>
+      {% if current_user %}
+        <a href="{{ url_for('publish') }}" class="nav-link nav-sell">发布闲置</a>
+        <a href="{{ url_for('me') }}" class="nav-link">个人中心</a>
+        {% if current_user.is_admin %}
+          <a href="{{ url_for('admin_dashboard') }}" class="nav-link">后台</a>
+        {% endif %}
+        <a href="{{ url_for('my_notifications') }}" class="nav-link nav-notice {% if notification_summary and (notification_summary.unread_notifications or notification_summary.refund_requests or notification_summary.pending_shipments) %}has-notice{% endif %}">
+          <span>提醒</span>
+          {% if notification_summary and (notification_summary.unread_notifications or notification_summary.refund_requests or notification_summary.pending_shipments) %}
+            <span class="notice-badge">{{ notification_summary.unread_notifications + notification_summary.refund_requests + notification_summary.pending_shipments }}</span>
+          {% endif %}
+        </a>
+        <a class="nav-wallet" href="{{ url_for('recharge') }}" title="钱包充值">
+          <span class="nav-wallet-label">钱包</span>
+          <span>¥{{ '%.2f'|format(current_user.balance) }}</span>
+        </a>
+        <span class="nav-user">
+          <span class="nav-avatar">{{ current_user.nickname[:1] }}</span>
+          <span class="nav-user-main">
+            <span class="nav-user-name">{{ current_user.nickname }}</span>
+            <span class="nav-user-role">{{ '管理员' if current_user.is_admin else '同学' }}</span>
+          </span>
+        </span>
+        <a class="nav-logout" href="{{ url_for('logout') }}">退出</a>
+      {% else %}
+        <a href="{{ url_for('login') }}" class="nav-link">登录</a>
+        <a class="btn-sm" href="{{ url_for('register') }}">注册</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>

@@ -44,25 +44,25 @@
     <td>{{ u.created_at }}</td>
     <td>
       <form action="{{ url_for('admin_update_user_permissions', uid=u.id) }}" method="post" class="admin-permission-form">
-        {{ csrf_field() }}
-        <label><input type="checkbox" name="is_admin" value="1" {% if u.admin_id %}checked{% endif %}> 管理员</label>
-        <label><input type="checkbox" name="can_manage_products" value="1" {% if u.can_manage_products %}checked{% endif %}> 商品</label>
-        <label><input type="checkbox" name="can_manage_users" value="1" {% if u.can_manage_users %}checked{% endif %}> 用户</label>
-        <label><input type="checkbox" name="can_manage_admin_register" value="1" {% if u.can_manage_admin_register %}checked{% endif %}> 注册</label>
-        <button class="btn-outline btn-xs" type="submit">保存</button>
-      </form>
+          {{ csrf_field() }}
+          <label><input type="checkbox" name="is_admin" value="1" {% if u.admin_id %}checked{% endif %}> 管理员</label>
+          <label><input type="checkbox" name="can_manage_products" value="1" {% if u.can_manage_products %}checked{% endif %}> 商品</label>
+          <label><input type="checkbox" name="can_manage_users" value="1" {% if u.can_manage_users %}checked{% endif %}> 用户</label>
+          <label><input type="checkbox" name="can_manage_admin_register" value="1" {% if u.can_manage_admin_register %}checked{% endif %}> 注册</label>
+          <button class="btn btn-outline compact-action" type="submit">保存</button>
+        </form>
     </td>
     <td>
       <div class="admin-actions">
         {% if u.id != current_user.id %}
-          <form action="{{ url_for('admin_toggle_user_status', uid=u.id) }}" method="post">
+          <form class="inline-action-form" action="{{ url_for('admin_toggle_user_status', uid=u.id) }}" method="post">
             {{ csrf_field() }}
-            <button class="btn-outline btn-xs {% if u.is_active %}btn-danger{% else %}btn-success{% endif %}" type="submit">
+            <button class="btn btn-outline compact-action {{ 'action-danger' if u.is_active else 'action-success' }}" type="submit">
               {{ '停用' if u.is_active else '启用' }}
             </button>
           </form>
         {% else %}
-          <span class="muted">当前账号</span>
+          <span class="muted action-note">当前账号</span>
         {% endif %}
       </div>
     </td>

@@ -1,0 +1,26 @@
+﻿{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flashes">
+      {% for category, msg in messages %}
+        <div class="flash flash-{{ category }}">{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<script>
+  // 自动隐藏Toast提示（可选辅助）
+  document.addEventListener('DOMContentLoaded', () => {
+    const flashes = document.querySelectorAll('.flash');
+    flashes.forEach(flash => {
+      // 点击可手动关闭
+      flash.addEventListener('click', () => {
+        flash.style.display = 'none';
+      });
+      // 防止动画异常，加一个强制的 setTimeout 清除 DOM
+      setTimeout(() => {
+        flash.remove();
+      }, 4000);
+    });
+  });
+</script>

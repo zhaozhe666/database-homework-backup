@@ -37,9 +37,17 @@
         {% else %}
         </a>
         {% endif %}
-        <form action="{{ url_for('delete_conversation', other_id=conversation.other_user_id) }}" method="post">
+        <form action="{{ url_for('delete_conversation', other_id=conversation.other_user_id) }}" method="post" style="display: flex; align-items: center; margin: 0;">
           {{ csrf_field() }}
-          <button type="submit" class="conversation-delete" onclick="return confirm('确定删除这个对话吗？')">删除</button>
+          <button type="submit" class="conversation-delete" onclick="return confirm('确定删除这个对话吗？')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"></path>
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+          </button>
         </form>
       </div>
     {% endfor %}
@@ -52,9 +60,9 @@
           <b>{{ selected_user.nickname }}</b>
           <span>对话</span>
         </div>
-        <form action="{{ url_for('delete_conversation', other_id=selected_user.id) }}" method="post">
+        <form action="{{ url_for('delete_conversation', other_id=selected_user.id) }}" method="post" style="margin: 0;">
           {{ csrf_field() }}
-          <button type="submit" class="btn-outline btn-xs" onclick="return confirm('确定删除这个对话吗？')">删除对话</button>
+          <button type="submit" class="btn-outline" style="padding: 6px 12px; min-height: auto; font-size: 13px;" onclick="return confirm('确定删除这个对话吗？')">删除对话</button>
         </form>
       </div>
 

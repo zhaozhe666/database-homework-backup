@@ -1,15 +1,46 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}登录 · 二手集市{% endblock %}
 {% block content %}
-<div class="auth-box">
-  <h2>登录</h2>
-  <form method="post">
-    {{ csrf_field() }}
-    <label>账号<input type="text" name="username" value="{{ username or '' }}" required></label>
-    <label>密码<input type="password" name="password" required></label>
-    <button type="submit" class="btn-primary">登录</button>
-  </form>
-  <p class="auth-switch">还没有账号？<a href="{{ url_for('register') }}">立即注册</a></p>
-  <p class="auth-tip">演示账号：alice / bob / carol，密码均为 123456</p>
+<div class="neo-auth-wrapper">
+  <div class="neo-auth-card">
+    <div class="neo-left-panel">
+      <div class="neo-brand">
+        <span class="neo-icon">🚀</span>
+        <h2>校园二手集市</h2>
+      </div>
+      <p class="neo-slogan">探索、发现、交易<br>让闲置物品焕发新生</p>
+
+      <div class="neo-glass-card">
+        <h4>💡 演示账号</h4>
+        <p>账号：alice / bob / carol</p>
+        <p>密码：123456</p>
+      </div>
+    </div>
+
+    <div class="neo-right-panel">
+      <h3>欢迎回来</h3>
+      <p class="neo-subtext">登录你的账号以继续</p>
+
+      <form method="post" class="neo-form">
+        {{ csrf_field() }}
+
+        <div class="neo-input-box">
+          <input type="text" name="username" value="{{ username or '' }}" required placeholder=" ">
+          <label>账号</label>
+        </div>
+
+        <div class="neo-input-box">
+          <input type="password" name="password" required placeholder=" ">
+          <label>密码</label>
+        </div>
+
+        <button type="submit" class="neo-submit-btn">立即登录</button>
+      </form>
+
+      <p class="neo-footer-text">
+        还没有账号？ <a href="{{ url_for('register') }}">免费创建一个</a>
+      </p>
+    </div>
+  </div>
 </div>
 {% endblock %}

@@ -39,12 +39,12 @@
       {% if report.status == 'pending' %}
         <form action="{{ url_for('admin_handle_report', rid=report.id) }}" method="post" class="admin-inline-form">
           {{ csrf_field() }}
-          <input type="text" name="note" maxlength="255" placeholder="处理说明">
-          <button class="btn-outline btn-success btn-xs" name="action" value="resolved" type="submit">成立</button>
-          <button class="btn-outline btn-danger btn-xs" name="action" value="rejected" type="submit">不成立</button>
+          <input class="admin-reason-input" type="text" name="note" maxlength="255" placeholder="处理说明">
+          <button class="btn btn-outline compact-action action-danger" name="action" value="resolved" type="submit">成立</button>
+          <button class="btn btn-outline compact-action action-muted" name="action" value="rejected" type="submit">不成立</button>
         </form>
       {% else %}
-        <span class="muted">{{ report.admin_name or '-' }} · {{ report.handled_at or '-' }}</span>
+        <span class="muted action-note">{{ report.admin_name or '-' }} · {{ report.handled_at or '-' }}</span>
       {% endif %}
     </td>
   </tr>

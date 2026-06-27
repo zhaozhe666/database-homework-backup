@@ -51,7 +51,7 @@
       {% if o.completed_at %}<div class="muted">完成 {{ o.completed_at }}</div>{% endif %}
       {% if o.cancelled_at %}<div class="muted">取消 {{ o.cancelled_at }}</div>{% endif %}
     </td>
-    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a></td>
+    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}" style="padding: 2px 8px; font-size: 12px; min-height: 0;">查看</a></td>
   </tr>
   {% endfor %}
 </table>

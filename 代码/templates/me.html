@@ -12,22 +12,19 @@
     </div>
   </div>
   <div class="me-wallet">
-    <span>钱包余额</span>
-    <strong>¥{{ '%.2f'|format(current_user.balance) }}</strong>
-    <div class="me-actions">
-      <a class="btn-sm" href="{{ url_for('recharge') }}">充值</a>
-      <a class="btn-outline btn-xs" href="{{ url_for('profile') }}">账号设置</a>
+    <div class="me-wallet-stack">
+      <span>钱包余额</span>
+      <strong>¥{{ '%.2f'|format(current_user.balance) }}</strong>
     </div>
   </div>
 </div>
 
 <section class="me-overview">
-  <div class="section-row">
+  <div class="section-row section-row-center">
     <div>
       <h2 class="section-title">我的交易概览</h2>
       <p class="muted">把买、卖、收藏和消息放在一张图里看。</p>
     </div>
-    <a class="btn-outline btn-xs" href="{{ url_for('publish') }}">发布闲置</a>
   </div>
   <div class="me-bars">
     <a href="{{ url_for('my_selling') }}" class="me-bar-row">

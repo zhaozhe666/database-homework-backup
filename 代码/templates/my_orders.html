@@ -29,11 +29,11 @@
     <td>{{ o.created_at }}</td>
     <td>
       <div class="row-actions">
-        <a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}">查看</a>
+        <a class="btn-outline btn-xs compact-action" href="{{ url_for('order_detail', oid=o.id) }}">查看</a>
         {% if role == 'seller' and o.status == 'paid' %}
-          <form action="{{ url_for('ship_order', oid=o.id) }}" method="post">
+          <form class="inline-action-form" action="{{ url_for('ship_order', oid=o.id) }}" method="post">
             {{ csrf_field() }}
-            <button class="btn-outline btn-success btn-xs" type="submit" onclick="return confirm('确定已经发货了吗？');">已发货</button>
+            <button class="btn-outline btn-success btn-xs compact-action" type="submit" onclick="return confirm('确定已经发货了吗？');">已发货</button>
           </form>
         {% endif %}
       </div>

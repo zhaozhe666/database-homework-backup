@@ -15,20 +15,20 @@
             <td>¥{{ '%.2f'|format(p.price) }}</td>
             <td><span class="status status-prod-{{ p.status }}">{{ PRODUCT_STATUS[p.status] }}</span></td>
             <td>{{ p.view_count }}</td>
-            <td class="row-actions">
+            <td class="row-actions row-actions-cell">
               {% if p.status == 'on_sale' %}
-                <a class="btn-outline btn-xs" href="{{ url_for('edit_product', pid=p.id) }}">编辑</a>
-                <form method="post" action="{{ url_for('remove_product', pid=p.id) }}">
+                <a class="btn-outline btn-xs compact-action" href="{{ url_for('edit_product', pid=p.id) }}">编辑</a>
+                <form class="inline-action-form" method="post" action="{{ url_for('remove_product', pid=p.id) }}">
                   {{ csrf_field() }}
-                  <button class="btn-outline btn-xs" type="submit">下架</button>
+                  <button class="btn-outline btn-xs compact-action action-danger" type="submit">下架</button>
                 </form>
               {% elif p.status == 'removed' %}
-                <form method="post" action="{{ url_for('restore_product', pid=p.id) }}">
+                <form class="inline-action-form" method="post" action="{{ url_for('restore_product', pid=p.id) }}">
                   {{ csrf_field() }}
-                  <button class="btn-outline btn-success btn-xs" type="submit">重新上架</button>
+                  <button class="btn-outline btn-xs compact-action action-success" type="submit">重新上架</button>
                 </form>
               {% else %}
-                <span class="muted">—</span>
+                <span class="muted action-note">不可操作</span>
               {% endif %}
             </td>
           </tr>

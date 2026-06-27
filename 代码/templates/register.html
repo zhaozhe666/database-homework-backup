@@ -1,22 +1,64 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% block title %}注册 · 二手集市{% endblock %}
 {% block content %}
-<div class="auth-box">
-  <h2>注册</h2>
-  <form method="post">
-    {{ csrf_field() }}
-    <label>账号<input type="text" name="username" required></label>
-    <label>密码<input type="password" name="password" required></label>
-    <label>昵称<input type="text" name="nickname" required></label>
-    <label>手机号<input type="text" name="phone" required></label>
-    <p class="auth-tip">注册后需在个人中心设置支付密码，设置完成后才能使用余额付款。</p>
-    <label>手机验证码</label>
-    <div class="verify-row">
-      <input type="text" name="phone_code" placeholder="测试环境任意填写" required>
-      <button type="button" class="btn-outline send-code-btn" data-code-button data-requires="phone" data-require-message="请先填写手机号">发送验证码</button>
+<div class="neo-auth-wrapper">
+  <div class="neo-auth-card">
+    <div class="neo-left-panel neo-left-panel-register">
+      <div class="neo-brand">
+        <span class="neo-icon">✨</span>
+        <h2>加入我们</h2>
+      </div>
+      <p class="neo-slogan">开启你的校园二手<br>交易之旅</p>
+
+      <div class="neo-glass-card">
+        <h4>🛡 安全提示</h4>
+        <p>注册后需在个人中心设置支付密码</p>
+        <p>设置完成后才能使用余额付款</p>
+      </div>
     </div>
-    <button type="submit" class="btn-primary">注册</button>
-  </form>
-  <p class="auth-switch">已有账号？<a href="{{ url_for('login') }}">去登录</a></p>
+
+    <div class="neo-right-panel">
+      <h3>创建新账号</h3>
+      <p class="neo-subtext">填写以下信息完成注册</p>
+
+      <form method="post" class="neo-form">
+        {{ csrf_field() }}
+
+        <div class="neo-form-grid">
+          <div class="neo-input-box">
+            <input type="text" name="username" required placeholder=" ">
+            <label>账号</label>
+          </div>
+
+          <div class="neo-input-box">
+            <input type="password" name="password" required placeholder=" ">
+            <label>密码</label>
+          </div>
+        </div>
+
+        <div class="neo-input-box">
+          <input type="text" name="nickname" required placeholder=" ">
+          <label>昵称</label>
+        </div>
+
+        <div class="neo-input-box">
+          <input type="text" name="phone" required placeholder=" ">
+          <label>手机号</label>
+        </div>
+
+        <div class="neo-input-box with-btn">
+          <input type="text" name="phone_code" placeholder=" " required>
+          <label>验证码 (随便填)</label>
+          <button type="button" class="neo-code-btn" data-code-button data-requires="phone" data-require-message="请先填写手机号">获取验证码</button>
+        </div>
+
+        <button type="submit" class="neo-submit-btn">立即注册</button>
+      </form>
+
+      <p class="neo-footer-text">
+        已有账号？ <a href="{{ url_for('login') }}">直接登录</a>
+      </p>
+    </div>
+  </div>
 </div>
 {% endblock %}

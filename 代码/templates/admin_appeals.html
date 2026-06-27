@@ -41,11 +41,11 @@
         <form action="{{ url_for('admin_handle_appeal', aid=appeal.id) }}" method="post" class="admin-inline-form">
           {{ csrf_field() }}
           <input type="text" name="resolution" maxlength="255" placeholder="仲裁说明" required>
-          <button class="btn-outline btn-success btn-xs" name="action" value="resolved" type="submit">已处理</button>
-          <button class="btn-outline btn-danger btn-xs" name="action" value="rejected" type="submit">不受理</button>
+          <button class="btn btn-outline compact-action action-success" name="action" value="resolved" type="submit">已处理</button>
+          <button class="btn btn-outline compact-action action-danger" name="action" value="rejected" type="submit">不受理</button>
         </form>
       {% else %}
-        <span class="muted">{{ appeal.admin_name or '-' }} · {{ appeal.handled_at or '-' }}</span>
+        <span class="muted action-note">{{ appeal.admin_name or '-' }} · {{ appeal.handled_at or '-' }}</span>
       {% endif %}
     </td>
   </tr>
