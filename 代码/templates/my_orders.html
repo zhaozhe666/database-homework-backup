@@ -1,7 +1,18 @@
 {% extends "base.html" %}
 {% block title %}{{ '我买到的' if role == 'buyer' else '我卖出的' }} · 二手集市{% endblock %}
 {% block content %}
-<h2 class="page-title">{{ '我买到的' if role == 'buyer' else '我卖出的' }}</h2>
+<div class="admin-head">
+  <div>
+    <h2 class="page-title">{{ '我买到的' if role == 'buyer' else '我卖出的' }}</h2>
+    {% if role == 'seller' and pending_ship_count %}
+      <p class="muted">{{ pending_ship_count }} 笔订单待发货</p>
+    {% endif %}
+  </div>
+  <div class="admin-filterbar admin-status-tabs">
+    <a class="{{ 'active' if role == 'buyer' else '' }}" href="{{ url_for('my_bought') }}">我买到的</a>
+    <a class="{{ 'active' if role == 'seller' else '' }}" href="{{ url_for('my_sold') }}">我卖出的{% if pending_ship_count %}<em>{{ pending_ship_count }}</em>{% endif %}</a>
+  </div>
+</div>
 {% if orders %}
 <table class="list-table">
   <tr>

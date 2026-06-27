@@ -3065,7 +3065,13 @@ def my_bought():
         "WHERE o.buyer_id=%s ORDER BY o.created_at DESC",
         (session["user_id"],),
     ))
-    return render_template("my_orders.html", orders=orders, role="buyer")
+    pending_ship_count = query_one("SELECT COUNT(*) AS c FROM orders WHERE seller_id=%s AND status='paid'", (session["user_id"],))["c"]
+    return render_template(
+        "my_orders.html",
+        orders=orders,
+        role="buyer",
+        pending_ship_count=pending_ship_count,
+    )
 
 
 @app.route("/me/sold")
@@ -3078,7 +3084,13 @@ def my_sold():
         "WHERE o.seller_id=%s ORDER BY o.created_at DESC",
         (session["user_id"],),
     ))
-    return render_template("my_orders.html", orders=orders, role="seller")
+    pending_ship_count = query_one("SELECT COUNT(*) AS c FROM orders WHERE seller_id=%s AND status='paid'", (session["user_id"],))["c"]
+    return render_template(
+        "my_orders.html",
+        orders=orders,
+        role="seller",
+        pending_ship_count=pending_ship_count,
+    )
 
 
 @app.route("/wallet/recharge", methods=["GET", "POST"])
