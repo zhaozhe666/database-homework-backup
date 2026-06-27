@@ -37,7 +37,7 @@
   {% for o in orders %}
   <tr>
     <td>
-      <a href="{{ url_for('order_detail', oid=o.id) }}">{{ o.order_no }}</a>
+      <a href="{{ url_for('order_detail', oid=o.id, admin=1) }}">{{ o.order_no }}</a>
       <div class="muted">ID {{ o.id }}</div>
     </td>
     <td><a href="{{ url_for('product_detail', pid=o.product_id) }}">{{ o.title }}</a></td>
@@ -51,7 +51,7 @@
       {% if o.completed_at %}<div class="muted">完成 {{ o.completed_at }}</div>{% endif %}
       {% if o.cancelled_at %}<div class="muted">取消 {{ o.cancelled_at }}</div>{% endif %}
     </td>
-    <td><a class="btn-outline btn-xs" href="{{ url_for('order_detail', oid=o.id) }}" style="padding: 2px 8px; font-size: 12px; min-height: 0;">查看</a></td>
+    <td><a class="btn-outline btn-xs compact-action" href="{{ url_for('order_detail', oid=o.id, admin=1) }}">查看</a></td>
   </tr>
   {% endfor %}
 </table>

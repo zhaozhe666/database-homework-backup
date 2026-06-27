@@ -125,7 +125,7 @@
   {% if recent_orders %}
     <div class="admin-recent-list">
       {% for o in recent_orders %}
-        <a class="admin-recent-order" href="{{ url_for('order_detail', oid=o.id) }}">
+        <a class="admin-recent-order" href="{{ url_for('order_detail', oid=o.id, admin=1) }}">
           <span>
             <b>{{ o.title }}</b>
             <small>{{ o.buyer_name }} -> {{ o.seller_name }}</small>

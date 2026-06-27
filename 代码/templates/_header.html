@@ -14,12 +14,12 @@
         <a href="{{ url_for('publish') }}" class="nav-link nav-sell">发布闲置</a>
         <a href="{{ url_for('me') }}" class="nav-link">个人中心</a>
         {% if current_user.is_admin %}
-          <a href="{{ url_for('admin_dashboard') }}" class="nav-link">后台</a>
+          <a href="{{ url_for('admin_dashboard') }}" class="nav-link">后台管理</a>
         {% endif %}
-        <a href="{{ url_for('my_notifications') }}" class="nav-link nav-notice {% if notification_summary and (notification_summary.unread_notifications or notification_summary.refund_requests or notification_summary.pending_shipments) %}has-notice{% endif %}">
+        <a href="{{ url_for('my_notifications') }}" class="nav-link nav-notice {% if notification_summary and notification_summary.total %}has-notice{% endif %}">
           <span>提醒</span>
-          {% if notification_summary and (notification_summary.unread_notifications or notification_summary.refund_requests or notification_summary.pending_shipments) %}
-            <span class="notice-badge">{{ notification_summary.unread_notifications + notification_summary.refund_requests + notification_summary.pending_shipments }}</span>
+          {% if notification_summary and notification_summary.total %}
+            <span class="notice-badge">{{ notification_summary.total }}</span>
           {% endif %}
         </a>
         <a class="nav-wallet" href="{{ url_for('recharge') }}" title="钱包充值">

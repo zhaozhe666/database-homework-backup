@@ -794,3 +794,96 @@
 - `代码/templates/login.html`、`代码/templates/my_messages.html`、`代码/templates/admin_orders.html`、`代码/templates/_flashes.html`、`代码/templates/_sidebar.html`、`代码/重构优化方案.md`：纳入本轮前端优化验证范围。
 - `progress.md`：追加本轮修复与验证记录。
 - 回滚方式：回滚本轮前端优化提交即可恢复；如手动回滚，恢复上述模板和 `style.css` 中关于布局壳、CSS 版本号、公共片段和通用操作类的改动。
+
+## 2026-06-27 - Task: 修复后台管理和个人中心入口显示
+### What was done
+- 恢复管理员顶部入口为“后台管理”，避免用户误以为后台入口消失。
+- 将发布商品和编辑商品页纳入个人中心侧栏布局，让“我的发布”相关页面保持同一工作台入口。
+- 收紧公共顶部导航间距和按钮尺寸，减少个人中心、后台管理入口在普通窗口宽度下被挤出可视区的风险。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Flask test client 验证普通用户 `/me`、`/publish`，管理员 `/`、`/admin`、`/me` 均返回 200，且页面 HTML 包含对应的个人中心、后台管理、账户侧栏和后台侧栏关键入口。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/templates/_header.html`：管理员顶部入口文案从“后台”恢复为“后台管理”。
+- `代码/templates/base.html`：将 `publish`、`edit_product` 加入账户工作台页面集合。
+- `代码/templates/_sidebar.html`：同步账户侧栏页面集合，保持侧栏高亮逻辑一致。
+- `代码/static/style.css`：收紧顶部导航宽度、间距和发布按钮尺寸，避免右侧入口被挤出。
+- 回滚方式：回退本次提交，或按上述 4 个文件恢复本轮 diff。
+
+## 2026-06-27 - Task: 修复工作台侧栏占满屏幕
+### What was done
+- 修正个人中心和后台管理在中等宽度窗口下被响应式规则切成单列的问题。
+- 让 621px 到 980px 的窗口仍保持左侧栏 + 右内容布局，只缩窄侧栏宽度；仅手机宽度下才上下堆叠。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Flask test client 验证普通用户 `/me`、管理员 `/admin`、管理员 `/me` 均返回 200，且页面包含 `app-shell`、`app-main`、`side-nav` 工作台结构。
+- CSS 断言验证 `980px` 断点仍为两列布局，`620px` 断点才切为单列布局。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/static/style.css`：调整工作台响应式断点，修复侧栏全宽导致主内容被顶到下方的问题。
+- 回滚方式：回退本次提交，或将 `代码/static/style.css` 中本轮 `@media (max-width: 980px)` 与 `@media (max-width: 620px)` 改动恢复。
+
+## 2026-06-27 - Task: 强制修复工作台空白布局
+### What was done
+- 将工作台侧栏强制固定在左列、主内容强制固定在右列，避免 7c636ca 后的样式覆盖导致后台管理和个人中心只显示侧栏。
+- 同步更新 CSS 版本号为 `ui20260627-workspace-fix`，避免浏览器继续使用旧缓存。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Flask test client 验证 `/admin`、`/me` 返回 200，页面包含新 CSS 版本号、`app-shell`、`side-nav`、`app-main` 以及对应主内容标记。
+- CSS 断言验证侧栏与主内容存在固定列规则：`grid-column: 1`、`grid-column: 2`，并覆盖桌面与中等宽度侧栏宽度。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/templates/base.html`：更新 CSS 版本号，强制浏览器加载本次布局修复。
+- `代码/static/style.css`：为工作台侧栏和主内容增加固定列定位与宽度规则。
+- 回滚方式：回退本次提交，或恢复 `base.html` 的 CSS 版本号和 `style.css` 中本轮工作台布局规则。
+
+## 2026-06-27 - Task: 全面检查前端收口后的可用性
+### What was done
+- 并行检查前端模板布局、业务流程回归和维护性风险，确认核心流程大多可用。
+- 修复后台订单详情从后台入口进入时误切到个人中心侧栏的问题，后台来源链接保留后台上下文。
+- 修复顶部提醒红点不统计未读私信的问题，统一使用后端汇总数。
+- 将订单详情充值入口文案从英文改为中文，并清理后台订单列表一个非动态内联按钮样式。
+- 为小屏后台表格增加横向滚动规则，降低表格撑破页面风险。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Jinja 模板全量解析通过。
+- Flask test client 验证游客 `/`、`/login`、`/register`，普通用户 `/me`、`/publish`、`/me/notifications`、`/wallet/recharge`，管理员 `/`、`/me`、`/admin`、`/admin/orders`、后台上下文订单详情和普通订单详情均返回 200。
+- 验证后台上下文订单详情显示后台侧栏，不显示个人中心侧栏。
+- CSS 断言验证工作台左右列规则和后台表格小屏横向滚动规则存在。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/templates/base.html`：识别后台上下文订单详情，并避免其套入个人中心布局。
+- `代码/templates/_sidebar.html`：后台上下文订单详情时高亮订单管理。
+- `代码/templates/admin_dashboard.html`：最近订单入口携带后台上下文参数。
+- `代码/templates/admin_orders.html`：订单详情入口携带后台上下文参数，并使用通用紧凑按钮类。
+- `代码/templates/admin_appeals.html`：申诉关联订单入口携带后台上下文参数。
+- `代码/templates/_header.html`：顶部提醒红点改为使用通知汇总总数。
+- `代码/templates/order_detail.html`：充值入口改为中文文案。
+- `代码/static/style.css`：补充后台表格小屏横向滚动规则。
+- 回滚方式：回退本次提交，或恢复上述文件中本轮 diff。
+
+## 2026-06-27 - Task: 统一我的发布操作按钮尺寸
+### What was done
+- 统一表格操作区紧凑按钮的高度、内边距和字号，让“编辑”“下架”“删除”等操作大小一致。
+- 将行内操作表单改为 inline-flex，避免提交按钮撑高操作区。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Flask test client 验证 `/me/selling` 返回 200，页面包含 `compact-action` 和 `inline-action-form`。
+- CSS 断言验证紧凑按钮规则存在。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/static/style.css`：加强 `.compact-action` 和 `.inline-action-form`，统一表格操作按钮尺寸。
+- 回滚方式：回退本次提交，或恢复 `代码/static/style.css` 中本轮按钮样式改动。
+
+## 2026-06-27 - Task: 精简我的发布删除提示
+### What was done
+- 移除“有订单不可删”“交易中不可删”的常驻提示。
+- 保留无订单商品才显示删除按钮的规则，避免列表操作区被规则说明占用。
+### Testing
+- `.\.venv\Scripts\python.exe -m py_compile app.py` 通过。
+- Flask test client 验证 `/me/selling` 返回 200，且不再出现“有订单不可删”提示。
+- `git diff --check` 通过，仅提示工作区行尾将由 Git 处理为 CRLF。
+### Notes
+- `代码/templates/my_selling.html`：删除列表操作区的不可删除常驻提示，仅保留可删除时的删除按钮。
+- 回滚方式：回退本次提交，或恢复 `代码/templates/my_selling.html` 中本轮删除提示分支。

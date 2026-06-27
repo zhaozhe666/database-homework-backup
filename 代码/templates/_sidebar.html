@@ -11,6 +11,8 @@
   'my_bought',
   'my_sold',
   'order_detail',
+  'publish',
+  'edit_product',
   'recharge'
 ] %}
 <aside class="side-nav">
@@ -72,7 +74,7 @@
       <span class="side-ico side-ico-bell"></span>商品举报
     </a>
     {% endif %}
-    <a class="{% if request.endpoint == 'admin_orders' %}active{% endif %}" href="{{ url_for('admin_orders') }}">
+    <a class="{% if request.endpoint == 'admin_orders' or (request.endpoint == 'order_detail' and request.args.get('admin') == '1') %}active{% endif %}" href="{{ url_for('admin_orders') }}">
       <span class="side-ico side-ico-order"></span>订单管理
     </a>
     <a class="{% if request.endpoint == 'admin_appeals' %}active{% endif %}" href="{{ url_for('admin_appeals') }}">

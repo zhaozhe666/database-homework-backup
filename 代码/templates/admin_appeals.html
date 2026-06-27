@@ -25,7 +25,7 @@
   {% for appeal in appeals %}
   <tr>
     <td>
-      <a href="{{ url_for('order_detail', oid=appeal.order_id) }}">{{ appeal.order_no }}</a>
+      <a href="{{ url_for('order_detail', oid=appeal.order_id, admin=1) }}">{{ appeal.order_no }}</a>
       <div class="muted">{{ appeal.created_at }}</div>
     </td>
     <td>{{ appeal.product_title }}</td>

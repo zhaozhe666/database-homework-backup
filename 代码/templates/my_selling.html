@@ -41,10 +41,6 @@
         {{ csrf_field() }}
         <button class="btn-outline btn-danger btn-xs compact-action" type="submit">删除</button>
       </form>
-      {% elif p.status == 'locked' %}
-      <span class="muted action-note">交易中不可删</span>
-      {% elif order_count > 0 %}
-      <span class="muted action-note">有订单不可删</span>
       {% endif %}
       </div>
     </td>

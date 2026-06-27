@@ -4,10 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}校园二手市场{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260627-cleanup') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260627-workspace-fix') }}">
 </head>
 <body>
-  {% set is_admin_area = request.endpoint and request.endpoint.startswith('admin') %}
+  {% set is_admin_order_detail = request.endpoint == 'order_detail' and request.args.get('admin') == '1' and current_user and current_user.is_admin %}
+  {% set is_admin_area = (request.endpoint and request.endpoint.startswith('admin')) or is_admin_order_detail %}
   {% set account_endpoints = [
     'me',
     'profile',
@@ -21,9 +22,11 @@
     'my_bought',
     'my_sold',
     'order_detail',
+    'publish',
+    'edit_product',
     'recharge'
   ] %}
-  {% set is_account_area = request.endpoint in account_endpoints %}
+  {% set is_account_area = request.endpoint in account_endpoints and not is_admin_order_detail %}
   {% if not is_account_area and not is_admin_area %}
   {% include '_header.html' %}
 
