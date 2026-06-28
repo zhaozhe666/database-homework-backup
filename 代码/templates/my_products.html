@@ -38,4 +38,5 @@
   {% else %}
     <div class="empty">你还没有发布过商品，<a href="{{ url_for('publish') }}">去发布</a>。</div>
   {% endif %}
+{% include '_refresh_once.html' %}
 {% endblock %}

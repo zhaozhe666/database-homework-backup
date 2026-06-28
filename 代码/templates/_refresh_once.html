@@ -1,0 +1,6 @@
+{% if request.args.get('refresh') == '1' %}
+<script>
+  const cleanUrl = window.location.pathname + window.location.search.replace(/([?&])refresh=1(&|$)/, "$1").replace(/[?&]$/, "");
+  window.location.replace(cleanUrl || window.location.pathname);
+</script>
+{% endif %}

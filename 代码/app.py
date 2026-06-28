@@ -2002,7 +2002,7 @@ def publish():
             )
             set_product_images(cur, cur.lastrowid, all_image_urls)
         flash("商品发布成功", "success")
-        return redirect(url_for("my_selling"))
+        return redirect(url_for("my_selling", refresh=1))
     return render_template("publish.html", categories=categories)
 
 
@@ -2014,7 +2014,7 @@ def edit_product(pid):
         abort(403)
     if product["status"] != "on_sale":
         flash("只有在售商品可以编辑", "warning")
-        return redirect(url_for("my_selling"))
+        return redirect(url_for("my_selling", refresh=1))
 
     current_images = get_product_image_urls(pid, product.get("image_url"))
     product["images"] = current_images
@@ -2074,7 +2074,7 @@ def remove_product(pid):
             (session["user_id"], pid),
         )
     flash("商品已下架", "info")
-    return redirect(url_for("my_selling"))
+    return redirect(url_for("my_selling", refresh=1))
 
 
 @app.route("/product/<int:pid>/restore", methods=["POST"])
@@ -2096,7 +2096,7 @@ def restore_product(pid):
             (pid,),
         )
     flash("商品已重新上架", "success")
-    return redirect(url_for("my_selling"))
+    return redirect(url_for("my_selling", refresh=1))
 
 
 @app.route("/product/<int:pid>/delete", methods=["POST"])
@@ -2123,7 +2123,7 @@ def delete_product(pid):
     with get_cursor(commit=True) as cur:
         cur.execute("DELETE FROM products WHERE id=%s", (pid,))
     flash("商品已删除", "info")
-    return redirect(url_for("my_selling"))
+    return redirect(url_for("my_selling", refresh=1))
 
 
 # --------------------------------------------------------------------- #
@@ -2233,6 +2233,23 @@ def order_detail(oid):
         "WHERE order_id=%s AND appellant_id=%s AND status='pending'",
         (oid, uid),
     )
+    back_source = request.args.get("back", "").strip()
+    if request.args.get("admin") == "1" and is_admin():
+        page_back_url = url_for("admin_orders")
+    elif back_source == "notifications":
+        page_back_url = url_for(
+            "my_notifications",
+            category=request.args.get("category", "all"),
+            refresh=1,
+        )
+    elif back_source == "seller":
+        page_back_url = url_for("my_sold", refresh=1)
+    elif back_source == "buyer":
+        page_back_url = url_for("my_bought", refresh=1)
+    elif uid == order["seller_id"]:
+        page_back_url = url_for("my_sold", refresh=1)
+    else:
+        page_back_url = url_for("my_bought", refresh=1)
     return render_template(
         "order_detail.html", order=order, payments=payments,
         reviews=reviews, my_review=my_review,
@@ -2246,6 +2263,7 @@ def order_detail(oid):
         order_ship_timeout_days=ORDER_SHIP_TIMEOUT_DAYS,
         payment_password_set=bool(current_user().get("payment_password_hash")) if uid == order["buyer_id"] else True,
         server_now_ms=int(datetime.now().timestamp() * 1000),
+        page_back_url=page_back_url,
     )
 
 
@@ -3067,10 +3085,15 @@ def open_notification(nid):
     with get_cursor(commit=True) as cur:
         cur.execute("UPDATE notifications SET is_read=1 WHERE id=%s AND user_id=%s", (nid, uid))
     if notice.get("order_id"):
-        return redirect(url_for("order_detail", oid=notice["order_id"]))
+        return redirect(url_for(
+            "order_detail",
+            oid=notice["order_id"],
+            back="notifications",
+            category=request.args.get("category", "all"),
+        ))
     if notice.get("product_id"):
         return redirect(url_for("product_detail", pid=notice["product_id"]))
-    return redirect(url_for("my_notifications"))
+    return redirect(url_for("my_notifications", refresh=1))
 
 
 @app.route("/me/notifications/message/<int:other_id>/open", methods=["POST"])
@@ -3086,7 +3109,7 @@ def open_unread_conversation(other_id):
             "AND receiver_deleted=0 AND is_read=0",
             (other_id, uid),
         )
-    return redirect(url_for("my_messages", with_user=other_id))
+    return redirect(url_for("my_messages", with_user=other_id, refresh=1))
 
 
 @app.route("/me/notifications/read-all", methods=["POST"])
@@ -3101,7 +3124,7 @@ def mark_notifications_read():
             (uid,),
         )
     flash("事件提醒已全部标为已读", "success")
-    return redirect(url_for("my_notifications"))
+    return redirect(url_for("my_notifications", refresh=1))
 
 
 @app.route("/message/<int:mid>/reply", methods=["POST"])
@@ -3134,7 +3157,7 @@ def reply_message(mid):
             (uid, receiver_id, message.get("product_id"), content),
         )
     flash("回复已发送", "success")
-    return redirect(url_for("my_messages", with_user=receiver_id))
+    return redirect(url_for("my_messages", with_user=receiver_id, refresh=1))
 
 
 @app.route("/message/conversation/<int:other_id>/reply", methods=["POST"])
@@ -3165,7 +3188,7 @@ def reply_conversation(other_id):
             (uid, other_id, product_id, content),
         )
     flash("回复已发送", "success")
-    return redirect(url_for("my_messages", with_user=other_id))
+    return redirect(url_for("my_messages", with_user=other_id, refresh=1))
 
 
 @app.route("/message/conversation/<int:other_id>/delete", methods=["POST"])
@@ -3186,7 +3209,7 @@ def delete_conversation(other_id):
             (uid, other_id),
         )
     flash("对话已删除", "success")
-    return redirect(url_for("my_messages"))
+    return redirect(url_for("my_messages", refresh=1))
 
 
 @app.route("/me/bought")
