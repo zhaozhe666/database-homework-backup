@@ -981,3 +981,16 @@
 - 数据库 `users`：更新 `username='bob'` 的 `nickname` 为 `小波`。
 - `progress.md`：追加本轮数据修复记录。
 - 回滚方式：如需恢复，执行 `UPDATE users SET nickname='??' WHERE username='bob';`，但不建议回滚到异常显示。
+
+## 2026-06-28 - Task: 同步当前数据库备份到 Git
+### What was done
+- 使用本机 MySQL 5.6 的 `mysqldump` 导出当前 `secondhand` 数据库完整备份。
+- 生成 `secondhand_full_20260628_current.mysql.sql`，用于同步当前测试商品和用户昵称修复后的数据库状态。
+### Testing
+- 通过：导出的 SQL 文件生成成功，大小约 53KB。
+- 通过：SQL 文件中可检索到第二批商品图片路径 `xianyu_seed_more`。
+- 通过：SQL 文件中可检索到第二批商品标题记录和 `bob` 用户昵称 `小波`。
+### Notes
+- `secondhand_full_20260628_current.mysql.sql`：新增当前数据库完整备份。
+- `progress.md`：追加本轮数据库导出和同步记录。
+- 回滚方式：如不需要该数据库备份，删除 `secondhand_full_20260628_current.mysql.sql` 并回退本轮提交；数据库本身不受 Git 回滚影响。
