@@ -994,3 +994,19 @@
 - `secondhand_full_20260628_current.mysql.sql`：新增当前数据库完整备份。
 - `progress.md`：追加本轮数据库导出和同步记录。
 - 回滚方式：如不需要该数据库备份，删除 `secondhand_full_20260628_current.mysql.sql` 并回退本轮提交；数据库本身不受 Git 回滚影响。
+
+## 2026-06-28 - Task: 清理临时抓取与旧数据库备份文件
+### What was done
+- 删除已被最新数据库备份替代的旧 SQL 备份文件。
+- 删除闲鱼商品抓取过程中产生的两个中间 JSON 缓存文件。
+- 保留已提交的正式导入脚本、商品图片、预览文档和当前数据库备份。
+### Testing
+- 通过：确认 `secondhand_full_20260627_002436.mysql.sql` 已不存在。
+- 通过：确认 `代码/xianyu_backpack_detail.json` 和 `代码/xianyu_more_candidates.json` 已不存在。
+- 通过：清理后 `git status --short` 无未跟踪临时文件。
+### Notes
+- `secondhand_full_20260627_002436.mysql.sql`：删除旧数据库备份。
+- `代码/xianyu_backpack_detail.json`：删除抓取中间缓存。
+- `代码/xianyu_more_candidates.json`：删除抓取中间缓存。
+- `progress.md`：追加本轮清理记录。
+- 回滚方式：如需恢复旧备份或抓取缓存，可从本机其他备份或重新抓取/重新导出生成；Git 中保留的是当前正式数据库备份 `secondhand_full_20260628_current.mysql.sql`。
