@@ -1453,7 +1453,7 @@ def admin_handle_report(rid):
         flash("处理说明最多 255 字", "danger")
         return redirect(url_for("admin_reports"))
     report = query_one(
-        "SELECT r.*, p.title, p.seller_id FROM product_reports r "
+        "SELECT r.*, p.title, p.seller_id, p.status AS product_status FROM product_reports r "
         "JOIN products p ON r.product_id = p.id WHERE r.id=%s",
         (rid,),
     )
@@ -1468,13 +1468,15 @@ def admin_handle_report(rid):
             "WHERE id=%s",
             (action, session["user_id"], note or None, rid),
         )
-        if action == "resolved":
+        product_removed = False
+        if action == "resolved" and report["product_status"] == "on_sale":
             cur.execute(
                 "UPDATE products SET status='removed', removal_reason=%s, "
                 "removed_by=%s, removed_at=NOW() "
-                "WHERE id=%s AND status IN ('on_sale','removed')",
+                "WHERE id=%s AND status='on_sale'",
                 (note or report["reason"], session["user_id"], report["product_id"]),
             )
+            product_removed = cur.rowcount > 0
         add_notification(
             cur,
             report["reporter_id"],
@@ -1494,7 +1496,7 @@ def admin_handle_report(rid):
             actor_id=session["user_id"],
         )
         add_admin_log(cur, "product_report_%s" % action, "product_report", rid, note or report["reason"])
-        if action == "resolved":
+        if product_removed:
             add_admin_log(cur, "product_remove", "product", report["product_id"], note or report["reason"])
     flash("商品举报处理完成", "success")
     return redirect(url_for("admin_reports"))
@@ -1692,7 +1694,7 @@ def admin_remove_product(pid):
     product = query_one("SELECT * FROM products WHERE id=%s", (pid,))
     if not product:
         abort(404)
-    if product["status"] not in ("on_sale", "removed"):
+    if product["status"] != "on_sale":
         flash("交易中或已售出的商品不能由后台直接下架", "warning")
         return redirect(redirect_target)
 
