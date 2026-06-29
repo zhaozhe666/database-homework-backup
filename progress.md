@@ -1124,3 +1124,21 @@
 - `docs/security_demo_policy.md`：钱包段落改为站内余额功能说明。
 - `docs/payment_password.md`：去掉开头“演示站”表述，保持支付密码说明与正式钱包口径一致。
 - 回滚方式：本轮涉及文件与上一轮安全改动存在重叠，不建议直接 `git restore`；如需只回滚本轮，请按本条 Notes 列出的钱包相关改动反向应用，或先保存当前 diff 后使用 `git apply -R` 反向应用钱包片段。
+
+## 2026-06-29 - Task: 收紧钱包充值金额后端校验
+### What was done
+- 将钱包充值金额从浮点数解析改为 `Decimal` 后端校验，拒绝空值、非数字、无穷大、NaN、超过 `DECIMAL(10,2)` 范围和超过 2 位小数的金额。
+- 充值页输入框补充最大值提示，保持钱包充值功能和成功后的返回逻辑不变。
+- 同步更新项目说明和安全说明中的钱包金额规则。
+### Testing
+- `python -B -c "... parse_recharge_amount ..."`：通过，确认 `0.01`、`1`、`1.2`、`1.23`、`99999999.99` 可通过，空值、`0`、负数、`nan`、`inf`、`1e309`、3 位小数和超范围金额会被拒绝。
+- `python -B _smoke.py`：通过，只读冒烟检查未触碰业务数据库。
+- `python -B -m py_compile app.py config.py db.py _smoke.py _verify.py`：通过。
+- `python -B -c "... jinja_env.parse ..."`：通过，模板语法可解析。
+- 未运行 `_verify.py`，因为该脚本会写入当前业务数据库测试数据。
+### Notes
+- `代码/app.py`：新增充值金额 `Decimal` 解析校验，并在充值时使用校验后的金额写入余额。
+- `代码/templates/recharge.html`：充值金额输入框增加 `max="99999999.99"` 提示。
+- `代码/说明.md`：补充站内钱包充值金额范围和小数位规则。
+- `docs/security_demo_policy.md`：补充钱包金额后端校验说明。
+- 回滚方式：使用 `git diff` 保存本轮改动后，可对上述 4 个文件执行反向补丁；若已提交，可用提交号回退到上一备份点 `f281fab`。

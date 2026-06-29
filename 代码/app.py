@@ -16,6 +16,7 @@ import random
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urljoin, urlparse
 
 from flask import (
@@ -39,6 +40,7 @@ ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 MAX_PRODUCT_IMAGES = 4
 IMAGE_URL_SEPARATOR = "|"
 DEMO_PHONE_CODE = "000000"
+MAX_WALLET_RECHARGE_AMOUNT = Decimal("99999999.99")
 RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
 ORDER_SHIP_TIMEOUT_DAYS = 7
@@ -359,6 +361,20 @@ def is_six_digit_code(value):
 
 def is_valid_demo_phone_code(value):
     return value == DEMO_PHONE_CODE
+
+
+def parse_recharge_amount(value):
+    if value is None:
+        return None
+    try:
+        amount = Decimal(str(value).strip())
+    except InvalidOperation:
+        return None
+    if not amount.is_finite() or amount <= 0 or amount > MAX_WALLET_RECHARGE_AMOUNT:
+        return None
+    if amount.as_tuple().exponent < -2:
+        return None
+    return amount
 
 
 def validate_csrf_token():
@@ -3280,14 +3296,14 @@ def my_sold():
 @login_required
 def recharge():
     if request.method == "POST":
-        amount = request.form.get("amount", type=float)
-        if amount is None or amount <= 0:
-            flash("充值金额须大于 0", "danger")
+        amount = parse_recharge_amount(request.form.get("amount"))
+        if amount is None:
+            flash("充值金额须为 0.01 到 99999999.99 之间的数字，最多保留 2 位小数", "danger")
             return render_template("recharge.html")
         with get_cursor(commit=True) as cur:
             cur.execute(
                 "UPDATE users SET balance = balance + %s WHERE id=%s",
-                (amount, session["user_id"]),
+                (str(amount), session["user_id"]),
             )
         flash("充值成功 +%.2f 元" % amount, "success")
         return redirect(safe_redirect_target("me"))

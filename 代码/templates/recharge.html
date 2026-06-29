@@ -6,7 +6,7 @@
   <p class="me-sub">当前余额：¥{{ '%.2f'|format(current_user.balance) }}</p>
   <form method="post">
     {{ csrf_field() }}
-    <label>充值金额(元)<input type="number" name="amount" step="0.01" min="0.01" required></label>
+    <label>充值金额(元)<input type="number" name="amount" step="0.01" min="0.01" max="99999999.99" required></label>
     <button type="submit" class="btn-primary">确认充值</button>
   </form>
   <p class="auth-tip">充值成功后，余额可用于订单支付；支付订单时仍需输入 6 位支付密码。</p>
