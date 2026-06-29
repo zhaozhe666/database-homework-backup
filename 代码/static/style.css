@@ -1444,6 +1444,7 @@ button, input, textarea, select { font: inherit; }
   font-weight: 900;
   color: var(--ink);
   margin-bottom: 8px;
+  white-space: nowrap;
 }
 
 .neo-subtext {
@@ -2898,6 +2899,18 @@ button, input, textarea, select { font: inherit; }
   white-space: nowrap;
 }
 
+.admin-user-tools {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+}
+
 .admin-filterbar a {
   min-height: 34px;
   display: inline-flex;
@@ -3001,25 +3014,189 @@ button, input, textarea, select { font: inherit; }
   height: 15px;
 }
 
+.admin-user-table {
+  min-width: 1240px;
+  table-layout: fixed;
+}
+
+.admin-user-col-name { width: 210px; }
+.admin-user-col-role { width: 95px; }
+.admin-user-col-status { width: 90px; }
+.admin-user-col-actions { width: 120px; }
+.admin-user-col-balance { width: 125px; }
+.admin-user-col-metrics { width: 210px; }
+.admin-user-col-time { width: 160px; }
+.admin-user-col-permissions { width: 300px; }
+
+.admin-user-table th,
+.admin-user-table td {
+  overflow-wrap: anywhere;
+}
+
+.admin-user-table th {
+  white-space: nowrap;
+}
+
+.admin-user-disabled td {
+  background: #fff7f7;
+}
+
+.admin-user-table .admin-permission-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(76px, 1fr)) 58px;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-user-table .admin-permission-form button {
+  grid-row: 1 / span 2;
+  grid-column: 3;
+}
+
+.admin-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.admin-status-action {
+  min-width: 82px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.admin-status-disable {
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+  background-color: #fff5f5 !important;
+}
+
+.admin-status-disable:hover {
+  color: #fff !important;
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+  background-color: #b91c1c !important;
+}
+
+.admin-status-enable {
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+  background: #f0fdf4 !important;
+  background-color: #f0fdf4 !important;
+}
+
+.admin-status-enable:hover {
+  color: #fff !important;
+  border-color: #047857 !important;
+  background: #047857 !important;
+  background-color: #047857 !important;
+}
+
+.admin-actions .action-danger {
+  color: #b91c1c !important;
+  border-color: #fecaca !important;
+  background: #fff5f5 !important;
+}
+
+.admin-actions .action-danger:hover {
+  color: #fff !important;
+  border-color: #b91c1c !important;
+  background: #b91c1c !important;
+}
+
+.admin-actions .action-success {
+  color: #047857 !important;
+  border-color: #a7f3d0 !important;
+  background: #f0fdf4 !important;
+}
+
+.admin-actions .action-success:hover {
+  color: #fff !important;
+  border-color: #047857 !important;
+  background: #047857 !important;
+}
+
+.admin-account-status {
+  min-width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.admin-account-active {
+  color: #047857;
+  background: #e7f8ee;
+}
+
+.admin-account-disabled {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.admin-permission-save {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.admin-permission-save:hover {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
 .admin-user-metrics {
   display: grid;
-  gap: 5px;
-  min-width: 118px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .admin-user-metrics span {
-  display: flex;
+  min-height: 44px;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #4b5563;
-  font-size: 13px;
-  line-height: 1.25;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
 .admin-user-metrics b {
   color: var(--ink);
-  font-size: 16px;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.admin-user-metrics small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
 }
 
 .admin-table td {
@@ -3904,4 +4081,579 @@ button, input, textarea, select { font: inherit; }
   .me-hero h2 { font-size: 28px; }
   .admin-dashboard-grid-visual { grid-template-columns: 1fr; }
   .log-card-head { flex-direction: column; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 全站第一轮屏幕适配兜底：只处理布局、滚动和可点击尺寸，不改业务结构 */
+/* -------------------------------------------------------------------------- */
+html,
+body {
+  max-width: 100%;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+}
+
+.app-main,
+.topbar,
+.top-actions,
+.top-context,
+.container,
+.detail,
+.auth-box,
+.form-box,
+.order-box,
+.me-card,
+.list-table,
+.list {
+  min-width: 0;
+}
+
+.row-actions,
+.detail-actions,
+.form-actions,
+.top-actions,
+.admin-actions {
+  min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .container {
+    max-width: 100%;
+  }
+
+  .app-shell {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+
+  .account-shell {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .side-nav {
+    width: 200px;
+    padding: 14px 10px;
+  }
+
+  .account-shell .side-nav {
+    width: 210px;
+  }
+
+  .app-main .container {
+    padding: 10px 20px 30px;
+  }
+
+  .nav-inner {
+    max-width: 100%;
+    padding: 14px 18px;
+    gap: 16px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+  }
+
+  .detail {
+    grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+    gap: 28px;
+    padding: 28px;
+  }
+
+  .detail-info h1 {
+    font-size: 28px;
+  }
+
+  .detail-price {
+    font-size: 36px;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .account-shell {
+    display: block;
+  }
+
+  .side-nav,
+  .account-shell .side-nav {
+    width: 100%;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: auto;
+    gap: 10px;
+    padding: 10px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 10px 24px rgba(25, 33, 52, .08);
+  }
+
+  .side-brand {
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  .side-brand-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .side-menu {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .side-menu a,
+  .side-bottom a {
+    flex: 0 0 auto;
+    min-height: 38px;
+    padding: 0 10px;
+    white-space: nowrap;
+  }
+
+  .side-bottom {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .topbar {
+    position: static;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .top-context strong {
+    white-space: normal;
+  }
+
+  .top-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .app-main .container {
+    padding: 10px 14px 26px;
+  }
+
+  .list-table,
+  .pay-list table,
+  .list {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .list-table tbody,
+  .pay-list table tbody,
+  .list tbody {
+    display: table;
+    min-width: 720px;
+    width: 100%;
+  }
+
+  .admin-table tbody {
+    min-width: 820px;
+  }
+
+  .admin-user-table {
+    min-width: 1080px;
+  }
+
+  .admin-searchbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .admin-search-count {
+    grid-column: 1 / -1;
+  }
+
+  .form-row,
+  .verify-row,
+  .image-field,
+  .detail-meta,
+  .order-meta,
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .detail {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  .detail-main-img {
+    max-height: min(72vw, 520px);
+  }
+}
+
+@media (max-width: 720px) {
+  .container {
+    margin: 16px auto;
+    padding: 0 12px;
+  }
+
+  .nav-inner {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .brand {
+    min-height: 40px;
+    padding-right: 4px;
+    font-size: 20px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 18px;
+  }
+
+  .search {
+    min-height: 42px;
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .search input {
+    padding: 9px 12px;
+    font-size: 14px;
+  }
+
+  .search button {
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .nav-links {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-links a {
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 0 10px;
+  }
+
+  .flashes {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+  }
+
+  .flash {
+    width: 100%;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 14px;
+  }
+
+  .detail,
+  .auth-box,
+  .form-box,
+  .order-box,
+  .profile-panel,
+  .profile-form {
+    padding: 16px;
+  }
+
+  .detail-actions .btn,
+  .detail-actions .btn-outline,
+  .detail-actions .btn-primary,
+  .buy-form .btn-primary,
+  .buy-form .btn-outline {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .verify-row {
+    align-items: stretch;
+  }
+
+  .send-code-btn,
+  .verify-row button,
+  .form-actions .btn,
+  .form-actions .btn-primary,
+  .form-actions .btn-outline {
+    width: 100%;
+  }
+
+  .order-head,
+  .admin-head,
+  .log-card-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-main .container {
+    padding: 8px 10px 22px;
+  }
+
+  .side-nav,
+  .account-shell .side-nav {
+    padding: 10px;
+  }
+
+  .side-brand b,
+  .top-name {
+    display: none;
+  }
+
+  .top-actions .btn-outline,
+  .top-actions .btn-primary,
+  .top-actions .btn-sm {
+    flex: 1 1 auto;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-title {
+    min-height: auto;
+  }
+
+  .price {
+    font-size: 21px;
+  }
+
+  .detail {
+    padding: 14px;
+  }
+
+  .detail-info h1 {
+    font-size: 22px;
+  }
+
+  .detail-price {
+    font-size: 30px;
+  }
+
+  .detail-thumbs {
+    gap: 6px;
+  }
+
+  .list-table tbody,
+  .pay-list table tbody,
+  .list tbody {
+    min-width: 640px;
+  }
+
+  .admin-table tbody {
+    min-width: 760px;
+  }
+
+  .admin-user-table {
+    min-width: 960px;
+  }
+
+  .admin-filterbar {
+    overflow-x: auto;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .admin-filterbar a {
+    flex: 0 0 auto;
+  }
+
+  .admin-searchbar,
+  .admin-user-searchbar {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-searchbar .btn-primary,
+  .admin-searchbar .btn-outline {
+    width: 100%;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-outline,
+  .btn-danger,
+  button[type="submit"] {
+    min-height: 40px;
+  }
+}
+
+/* 登录/注册页单独适配：中屏不再硬挤左右分栏 */
+@media (max-width: 1280px) {
+  .neo-auth-wrapper {
+    min-height: auto;
+    padding: 22px 12px 34px;
+  }
+
+  .neo-auth-card {
+    max-width: 760px;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .neo-left-panel {
+    flex: none;
+    min-height: 260px;
+    padding: 34px;
+  }
+
+  .neo-brand {
+    margin-bottom: 22px;
+  }
+
+  .neo-slogan {
+    margin-bottom: 22px;
+    font-size: 28px;
+  }
+
+  .neo-glass-card {
+    max-width: 520px;
+    margin-top: 0;
+  }
+
+  .neo-right-panel {
+    padding: 36px;
+  }
+
+  .neo-right-panel h3 {
+    font-size: 30px;
+    white-space: nowrap;
+  }
+
+  .neo-subtext {
+    margin-bottom: 28px;
+  }
+}
+
+@media (max-width: 720px) {
+  .neo-auth-wrapper {
+    padding: 16px 10px 28px;
+  }
+
+  .neo-auth-card {
+    border-radius: 18px;
+  }
+
+  .neo-left-panel {
+    min-height: 0;
+    padding: 26px 22px;
+  }
+
+  .neo-brand {
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .neo-icon {
+    font-size: 26px;
+  }
+
+  .neo-brand h2 {
+    font-size: 21px;
+  }
+
+  .neo-slogan {
+    font-size: 24px;
+    line-height: 1.35;
+  }
+
+  .neo-glass-card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .neo-right-panel {
+    padding: 28px 22px 30px;
+  }
+
+  .neo-right-panel h3 {
+    font-size: 28px;
+  }
+
+  .neo-form,
+  .neo-form-grid {
+    gap: 16px;
+  }
+
+  .neo-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .neo-input-box input {
+    min-height: 58px;
+    padding: 22px 16px 10px;
+  }
+
+  .neo-input-box label {
+    left: 16px;
+  }
+
+  .neo-submit-btn {
+    min-height: 52px;
+    padding: 14px;
+  }
+}
+
+@media (max-width: 520px) {
+  .neo-auth-wrapper {
+    padding: 12px 8px 24px;
+  }
+
+  .neo-auth-card {
+    border-radius: 16px;
+  }
+
+  .neo-left-panel {
+    padding: 22px 18px;
+  }
+
+  .neo-slogan {
+    font-size: 22px;
+  }
+
+  .neo-glass-card p {
+    font-size: 13px;
+  }
+
+  .neo-right-panel {
+    padding: 24px 18px 26px;
+  }
+
+  .neo-right-panel h3 {
+    font-size: 26px;
+  }
+
+  .neo-input-box.with-btn {
+    flex-direction: column;
+  }
+
+  .neo-code-btn {
+    min-height: 46px;
+    width: 100%;
+  }
+
+  .neo-footer-text {
+    margin-top: 24px;
+  }
 }

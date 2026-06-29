@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}校园二手市场{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260627-workspace-fix') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='ui20260629-responsive-3') }}">
 </head>
 <body>
   {% set is_admin_order_detail = request.endpoint == 'order_detail' and request.args.get('admin') == '1' and current_user and current_user.is_admin %}

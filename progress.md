@@ -1142,3 +1142,30 @@
 - `代码/说明.md`：补充站内钱包充值金额范围和小数位规则。
 - `docs/security_demo_policy.md`：补充钱包金额后端校验说明。
 - 回滚方式：使用 `git diff` 保存本轮改动后，可对上述 4 个文件执行反向补丁；若已提交，可用提交号回退到上一备份点 `f281fab`。
+
+## 2026-06-29 - Task: 后台用户管理与全站响应式适配收尾
+### What was done
+- 后台用户管理增加“全部 / 启用 / 停用”筛选，停用账号登录提示改为更清楚的管理员停用说明。
+- 调整用户管理表格结构，将操作列前移到状态旁边，重新设计“停用账号 / 恢复启用”按钮和状态标签，避免按钮被权限区域遮挡。
+- 新增全站第一轮响应式兜底样式，覆盖容器、账户/后台外壳、导航、表格、表单按钮、商品列表和商品详情页。
+- 精修登录/注册页中小屏布局，常见窗口宽度下提前切为上下布局，并避免“欢迎回来”等标题被拆字。
+- 更新 CSS 静态资源版本号为 `ui20260629-responsive-3`，确保浏览器加载最新样式。
+- 新增后台用户管理说明和响应式布局说明文档，便于后续使用、验证和协作。
+
+### Testing
+- `python -B -m py_compile app.py config.py db.py _smoke.py _verify.py`：通过。
+- `python -B -c "import app, pathlib; [app.app.jinja_env.parse(p.read_text(encoding='utf-8')) for p in pathlib.Path('templates').rglob('*.html')]; print('templates parse ok')"`：通过，模板语法可解析。
+- `python -B _smoke.py`：通过，只读冒烟检查未触碰业务数据库。
+- 本地 HTTP 检查：`/`、`/login?gitcheck=1`、`/register?gitcheck=1` 均返回 200，并确认页面加载 `ui20260629-responsive-3` CSS 版本。
+- 多代理只读复核：后端/安全、前端/UI、文档/git 范围均无代码阻断问题；已按复核意见清理未提交日志中的乱码记录。
+- 未运行 `_verify.py`，因为该脚本会写入当前业务数据库测试数据。
+
+### Notes
+- `代码/app.py`：新增用户状态筛选、状态数量统计，并优化停用账号登录提示。
+- `代码/templates/admin_users.html`：新增状态筛选工具区，前移操作列，调整停用/启用按钮、状态标签和交易统计结构。
+- `代码/static/style.css`：新增后台用户管理样式、全站响应式兜底规则和登录/注册页中小屏修正规则。
+- `代码/templates/base.html`：更新 CSS 版本参数，避免浏览器继续加载旧样式。
+- `docs/admin_user_management.md`：新增管理员用户管理说明，记录停用、筛选和操作区行为。
+- `docs/responsive_layout.md`：新增全站屏幕适配说明和验证范围。
+- `progress.md`：追加本轮修改、验证和回滚记录。
+- 回滚方式：对上述文件执行反向补丁；若已提交，可使用本次提交号回退，或回退到上一备份点 `bd882e9`。

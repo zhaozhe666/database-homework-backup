@@ -414,7 +414,7 @@ def login_required(view):
             return redirect(url_for("login", next=request.path))
         if not user.get("is_active", 1):
             session.clear()
-            flash("账号已被停用，请联系管理员", "danger")
+            flash("账号已被管理员停用，请联系管理员处理。", "danger")
             return redirect(url_for("login"))
         return view(*args, **kwargs)
     return wrapped
@@ -1339,7 +1339,7 @@ def login():
             flash("账号或密码错误", "danger")
             return render_template("login.html", username=username)
         if not user.get("is_active", 1):
-            flash("账号已被停用，请联系管理员", "danger")
+            flash("账号已被管理员停用，请联系管理员处理。", "danger")
             return render_template("login.html", username=username)
         session["user_id"] = user["id"]
         flash("登录成功，欢迎 %s" % user["nickname"], "success")
@@ -1791,8 +1791,15 @@ def admin_restore_product(pid):
 @admin_required("can_manage_users")
 def admin_users():
     keyword = request.args.get("q", "").strip()
-    where_sql = ""
+    status_filter = request.args.get("status", "all").strip()
+    if status_filter not in ("all", "active", "disabled"):
+        status_filter = "all"
+    where_clauses = []
     params = []
+    if status_filter == "active":
+        where_clauses.append("u.is_active=1")
+    elif status_filter == "disabled":
+        where_clauses.append("u.is_active=0")
     if keyword:
         keyword_lower = keyword.lower()
         like = "%%%s%%" % keyword
@@ -1810,7 +1817,8 @@ def admin_users():
             search_clauses.append("u.is_active=1")
         if "停用".find(keyword) >= 0:
             search_clauses.append("u.is_active=0")
-        where_sql = "WHERE " + " OR ".join(search_clauses) + " "
+        where_clauses.append("(" + " OR ".join(search_clauses) + ")")
+    where_sql = ("WHERE " + " AND ".join(where_clauses) + " ") if where_clauses else ""
 
     users = query_all(
         "SELECT u.*, a.id AS admin_id, "
@@ -1825,7 +1833,19 @@ def admin_users():
         tuple(params),
     )
     admin_count = active_admin_count()
-    return render_template("admin_users.html", users=users, admin_count=admin_count, keyword=keyword)
+    user_status_counts = {
+        "all": query_one("SELECT COUNT(*) AS c FROM users")["c"],
+        "active": query_one("SELECT COUNT(*) AS c FROM users WHERE is_active=1")["c"],
+        "disabled": query_one("SELECT COUNT(*) AS c FROM users WHERE is_active=0")["c"],
+    }
+    return render_template(
+        "admin_users.html",
+        users=users,
+        admin_count=admin_count,
+        keyword=keyword,
+        status_filter=status_filter,
+        user_status_counts=user_status_counts,
+    )
 
 
 @app.route("/admin/users/<int:uid>/admin", methods=["POST"])

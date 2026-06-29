@@ -5,22 +5,41 @@
   <h2 class="page-title">用户管理</h2>
 </div>
 
-<form class="admin-searchbar" action="{{ url_for('admin_users') }}" method="get">
-  <input type="search" name="q" value="{{ keyword or '' }}" placeholder="搜索昵称、账号、手机号、管理员、启用或停用">
-  <button class="btn-primary btn-xs" type="submit">搜索</button>
-  {% if keyword %}
-    <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">清空</a>
-  {% endif %}
-  <span class="admin-search-count">找到 {{ users|length }} 个用户</span>
-</form>
+<div class="admin-user-tools">
+  <div class="admin-filterbar admin-user-filterbar">
+    <a class="{% if status_filter == 'all' %}active{% endif %}" href="{{ url_for('admin_users', q=keyword) if keyword else url_for('admin_users') }}">全部 <span>{{ user_status_counts.all }}</span></a>
+    <a class="{% if status_filter == 'active' %}active{% endif %}" href="{{ url_for('admin_users', status='active', q=keyword) }}">启用 <span>{{ user_status_counts.active }}</span></a>
+    <a class="{% if status_filter == 'disabled' %}active{% endif %}" href="{{ url_for('admin_users', status='disabled', q=keyword) }}">停用 <span>{{ user_status_counts.disabled }}</span></a>
+  </div>
+  <form class="admin-searchbar admin-user-searchbar" action="{{ url_for('admin_users') }}" method="get">
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <input type="search" name="q" value="{{ keyword or '' }}" placeholder="搜索昵称、账号、手机号、管理员、启用或停用">
+    <button class="btn-primary btn-xs" type="submit">搜索</button>
+    {% if keyword or status_filter != 'all' %}
+      <a class="btn-outline btn-xs" href="{{ url_for('admin_users') }}">清空</a>
+    {% endif %}
+    <span class="admin-search-count">找到 {{ users|length }} 个用户</span>
+  </form>
+</div>
 
 {% if users %}
-<table class="list-table admin-table">
+<div class="admin-table-scroll">
+<table class="list-table admin-table admin-user-table">
+  <colgroup>
+    <col class="admin-user-col-name">
+    <col class="admin-user-col-role">
+    <col class="admin-user-col-status">
+    <col class="admin-user-col-actions">
+    <col class="admin-user-col-balance">
+    <col class="admin-user-col-metrics">
+    <col class="admin-user-col-time">
+    <col class="admin-user-col-permissions">
+  </colgroup>
   <tr>
-    <th>用户</th><th>身份</th><th>状态</th><th>余额</th><th>交易统计</th><th>注册时间</th><th>权限</th><th>操作</th>
+    <th>用户</th><th>身份</th><th>状态</th><th>操作</th><th>余额</th><th>交易统计</th><th>注册时间</th><th>权限</th>
   </tr>
   {% for u in users %}
-  <tr>
+  <tr class="{% if not u.is_active %}admin-user-disabled{% endif %}">
     <td>
       <b>{{ u.nickname }}</b>
       <div class="muted">{{ u.username }} · {{ u.phone or '未填手机' }}</div>
@@ -28,17 +47,31 @@
     <td>{{ '管理员' if u.admin_id else '普通用户' }}</td>
     <td>
       {% if u.is_active %}
-        <span class="status status-prod-on_sale">启用</span>
+        <span class="admin-account-status admin-account-active">启用</span>
       {% else %}
-        <span class="status status-prod-removed">停用</span>
+        <span class="admin-account-status admin-account-disabled">已停用</span>
       {% endif %}
+    </td>
+    <td>
+      <div class="admin-actions">
+        {% if u.id != current_user.id %}
+          <form class="inline-action-form" action="{{ url_for('admin_toggle_user_status', uid=u.id) }}" method="post" onsubmit="return confirm('{{ '确定停用这个账号吗？停用后该用户不能登录。' if u.is_active else '确定恢复启用这个账号吗？' }}');">
+            {{ csrf_field() }}
+            <button class="admin-status-action {{ 'admin-status-disable' if u.is_active else 'admin-status-enable' }}" type="submit">
+              {{ '停用账号' if u.is_active else '恢复启用' }}
+            </button>
+          </form>
+        {% else %}
+          <span class="muted action-note">当前账号</span>
+        {% endif %}
+      </div>
     </td>
     <td>¥{{ '%.2f'|format(u.balance) }}</td>
     <td>
       <div class="admin-user-metrics">
-        <span><b>{{ u.product_count }}</b> 发布商品</span>
-        <span><b>{{ u.bought_count }}</b> 购买订单</span>
-        <span><b>{{ u.sold_count }}</b> 卖出订单</span>
+        <span><b>{{ u.product_count }}</b><small>发布</small></span>
+        <span><b>{{ u.bought_count }}</b><small>购买</small></span>
+        <span><b>{{ u.sold_count }}</b><small>卖出</small></span>
       </div>
     </td>
     <td>{{ u.created_at }}</td>
@@ -49,27 +82,14 @@
           <label><input type="checkbox" name="can_manage_products" value="1" {% if u.can_manage_products %}checked{% endif %}> 商品</label>
           <label><input type="checkbox" name="can_manage_users" value="1" {% if u.can_manage_users %}checked{% endif %}> 用户</label>
           <label><input type="checkbox" name="can_manage_admin_register" value="1" {% if u.can_manage_admin_register %}checked{% endif %}> 注册</label>
-          <button class="btn btn-outline compact-action" type="submit">保存</button>
+          <button class="admin-permission-save" type="submit">保存</button>
         </form>
-    </td>
-    <td>
-      <div class="admin-actions">
-        {% if u.id != current_user.id %}
-          <form class="inline-action-form" action="{{ url_for('admin_toggle_user_status', uid=u.id) }}" method="post">
-            {{ csrf_field() }}
-            <button class="btn btn-outline compact-action {{ 'action-danger' if u.is_active else 'action-success' }}" type="submit">
-              {{ '停用' if u.is_active else '启用' }}
-            </button>
-          </form>
-        {% else %}
-          <span class="muted action-note">当前账号</span>
-        {% endif %}
-      </div>
     </td>
   </tr>
   {% endfor %}
 </table>
+</div>
 {% else %}
-  <div class="empty">{{ '没有匹配的用户。' if keyword else '暂无用户。' }}</div>
+  <div class="empty">{{ '没有匹配的用户。' if keyword or status_filter != 'all' else '暂无用户。' }}</div>
 {% endif %}
 {% endblock %}
