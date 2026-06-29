@@ -15,7 +15,7 @@
       <input type="hidden" name="action" value="verify_old">
       <section>
         <h2>验证当前手机号</h2>
-        <p class="auth-tip">先向当前绑定手机号发送验证码，验证通过后才能绑定新的手机号。当前为测试环境，验证码任意填写即可通过。</p>
+        <p class="auth-tip">先向当前绑定手机号发送验证码，验证通过后才能绑定新的手机号。当前为测试环境，测试验证码为 000000。</p>
         <div class="bound-phone-box">
           <span>当前手机号</span>
           <strong>{{ user.phone or '未绑定' }}</strong>
@@ -30,7 +30,7 @@
       <input type="hidden" name="action" value="bind_new">
       <section>
         <h2>绑定新手机号</h2>
-        <p class="auth-tip">当前手机号已验证，通过新手机号验证码后才会保存修改。当前为测试环境，验证码任意填写即可通过。</p>
+        <p class="auth-tip">当前手机号已验证，通过新手机号验证码后才会保存修改。当前为测试环境，测试验证码为 000000。</p>
       <div class="bound-phone-box">
         <span>当前手机号</span>
         <strong>{{ user.phone or '未绑定' }}</strong>

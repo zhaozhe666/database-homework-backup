@@ -3240,6 +3240,11 @@ button, input, textarea, select { font: inherit; }
   align-items: flex-end;
 }
 
+.me-wallet-link {
+  margin-top: 10px;
+  padding: 7px 14px;
+}
+
 .me-hero {
   display: flex;
   align-items: center;

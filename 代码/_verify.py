@@ -14,6 +14,12 @@ from werkzeug.security import generate_password_hash
 app.config["TESTING"] = True
 client = app.test_client()
 ensure_runtime_schema()
+VALID_PNG_BYTES = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00"
+    b"\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff?\x00\x05\xfe\x02\xfeA\xe2P\xb3"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
 
 
 def csrf_value():
@@ -134,7 +140,7 @@ pid = db.query_one("SELECT id FROM products WHERE title=%s",
                    (f"验证商品{sfx}",))["id"]
 post("/publish", title=f"撤回退款商品{sfx}", description="中文文件名上传验证",
      price="100.00", category_id="1", condition_level="9成新",
-     image_files=(io.BytesIO(b"fake image bytes"), "图片.jpg"))
+     image_files=(io.BytesIO(VALID_PNG_BYTES), "图片.png"))
 cancel_refund_pid = db.query_one("SELECT id FROM products WHERE title=%s",
                                  (f"撤回退款商品{sfx}",))["id"]
 post("/publish", title=f"拒绝退款商品{sfx}", description="退款拒绝验证用商品",

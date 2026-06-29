@@ -26,7 +26,7 @@ from markupsafe import Markup, escape
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from config import SECRET_KEY
+from config import DEBUG, SECRET_KEY
 from db import query_all, query_one, get_cursor
 
 app = Flask(__name__)
@@ -38,6 +38,7 @@ UPLOAD_FOLDER = os.path.join(app.static_folder, "uploads")
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 MAX_PRODUCT_IMAGES = 4
 IMAGE_URL_SEPARATOR = "|"
+DEMO_PHONE_CODE = "000000"
 RUNTIME_SCHEMA_READY = False
 ORDER_PAYMENT_TIMEOUT_MINUTES = 10
 ORDER_SHIP_TIMEOUT_DAYS = 7
@@ -356,6 +357,10 @@ def is_six_digit_code(value):
     return bool(value and value.isdigit() and len(value) == 6)
 
 
+def is_valid_demo_phone_code(value):
+    return value == DEMO_PHONE_CODE
+
+
 def validate_csrf_token():
     """校验会修改状态的请求，防止第三方页面伪造表单提交。"""
     if request.method != "POST":
@@ -444,6 +449,10 @@ def save_uploaded_images(file_storages):
         ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
         if ext not in ALLOWED_IMAGE_EXTENSIONS:
             raise ValueError("图片格式仅支持 JPG、PNG、GIF、WEBP")
+        header = file_storage.stream.read(12)
+        file_storage.stream.seek(0)
+        if not is_allowed_image_header(header, ext):
+            raise ValueError("上传文件内容不是有效图片")
         prepared.append((file_storage, ext))
 
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -459,6 +468,18 @@ def save_uploaded_image(file_storage):
     """保存单张上传图片，保留给测试和旧调用使用。"""
     urls = save_uploaded_images([file_storage])
     return urls[0] if urls else None
+
+
+def is_allowed_image_header(header, ext):
+    if ext in ("jpg", "jpeg"):
+        return header.startswith(b"\xff\xd8\xff")
+    if ext == "png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    if ext == "gif":
+        return header.startswith((b"GIF87a", b"GIF89a"))
+    if ext == "webp":
+        return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+    return False
 
 
 def read_product_form():
@@ -1269,8 +1290,8 @@ def register():
         if not username or not password or not nickname or not phone:
             flash("账号、密码、昵称、手机号不能为空", "danger")
             return render_template("register.html")
-        if not phone_code:
-            flash("请填写手机验证码", "danger")
+        if not is_valid_demo_phone_code(phone_code):
+            flash("测试验证码不正确，请填写 000000", "danger")
             return render_template("register.html")
         if query_one("SELECT id FROM users WHERE username=%s", (username,)):
             flash("该账号已被注册", "danger")
@@ -1931,8 +1952,8 @@ def admin_register():
         if not username or not password or not nickname or not phone:
             flash("账号、密码、昵称、手机号不能为空", "danger")
             return render_template("admin_register.html")
-        if not phone_code:
-            flash("请填写手机验证码", "danger")
+        if not is_valid_demo_phone_code(phone_code):
+            flash("测试验证码不正确，请填写 000000", "danger")
             return render_template("admin_register.html")
         if query_one("SELECT id FROM users WHERE username=%s", (username,)):
             flash("该账号已被注册", "danger")
@@ -2839,8 +2860,8 @@ def change_phone():
             old_phone_code = request.form.get("old_phone_code", "").strip()
             if not user.get("phone"):
                 return redirect(url_for("change_phone"))
-            if not old_phone_code:
-                flash("请填写当前手机号验证码", "danger")
+            if not is_valid_demo_phone_code(old_phone_code):
+                flash("测试验证码不正确，请填写 000000", "danger")
                 return render_template("change_phone.html", user=user, step="verify_old")
             mark_phone_change_verified()
             flash("当前手机号验证通过，请绑定新手机号", "success")
@@ -2862,8 +2883,8 @@ def change_phone():
         if phone == (user.get("phone") or ""):
             flash("新手机号不能和当前手机号相同", "danger")
             return render_template("change_phone.html", user=user, step="bind_new")
-        if not new_phone_code:
-            flash("请填写新手机号验证码", "danger")
+        if not is_valid_demo_phone_code(new_phone_code):
+            flash("测试验证码不正确，请填写 000000", "danger")
             return render_template("change_phone.html", user=user, step="bind_new")
 
         with get_cursor(commit=True) as cur:
@@ -2897,6 +2918,9 @@ def change_payment_password():
             return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
         if not new_payment_password or not confirm_payment_password or not payment_phone_code:
             flash("请完整填写新支付密码、确认支付密码和手机验证码", "danger")
+            return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
+        if not is_valid_demo_phone_code(payment_phone_code):
+            flash("测试验证码不正确，请填写 000000", "danger")
             return render_template("change_payment_password.html", user=user, has_payment_password=has_payment_password)
         if has_payment_password and not is_six_digit_code(old_payment_password):
             flash("原支付密码必须是 6 位数字", "danger")
@@ -3266,7 +3290,7 @@ def recharge():
                 (amount, session["user_id"]),
             )
         flash("充值成功 +%.2f 元" % amount, "success")
-        return redirect(url_for("me"))
+        return redirect(safe_redirect_target("me"))
     return render_template("recharge.html")
 
 
@@ -3291,4 +3315,4 @@ def file_too_large(e):
 
 if __name__ == "__main__":
     # use_reloader=False：避免本机 watchdog 版本与 Werkzeug 重载器不兼容导致启动失败
-    app.run(host="127.0.0.1", port=5000, debug=True, use_reloader=False)
+    app.run(host="127.0.0.1", port=5000, debug=DEBUG, use_reloader=False)

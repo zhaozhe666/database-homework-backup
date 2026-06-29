@@ -15,6 +15,7 @@
     <div class="me-wallet-stack">
       <span>钱包余额</span>
       <strong>¥{{ '%.2f'|format(current_user.balance) }}</strong>
+      <a class="btn-outline me-wallet-link" href="{{ url_for('recharge') }}">充值</a>
     </div>
   </div>
 </div>
